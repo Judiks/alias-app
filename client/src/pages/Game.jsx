@@ -46,6 +46,10 @@ export default function Game() {
 
     socket.on('turn-changed', ({ room }) => {
       setRoom(room);
+      // Update team membership
+      const inRed = room.teams.red.players.find(p => p.id === socket.id);
+      const inBlue = room.teams.blue.players.find(p => p.id === socket.id);
+      setMyTeam(inRed ? 'red' : inBlue ? 'blue' : null);
       // Force update explainer status
       setIsExplainer(room.currentRound?.explainer === socket.id);
       if (room.currentRound?.explainer === socket.id) {
