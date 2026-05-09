@@ -22,11 +22,6 @@ export default function LobbyList() {
       setLoading(false);
     });
 
-    // Handle successful room join
-    socket.on('room-joined', ({ roomId, room, team }) => {
-      navigate(`/room/${roomId}`, { state: { room, team } });
-    });
-
     // Auto-refresh every 5 seconds
     const interval = setInterval(() => {
       socket.emit('get-rooms');
@@ -41,19 +36,12 @@ export default function LobbyList() {
       clearInterval(interval);
       clearTimeout(timeout);
       socket.off('rooms-list');
-      socket.off('room-joined');
     };
-  }, [navigate]);
+  }, []);
 
   const handleQuickJoin = (roomId) => {
-    const savedName = localStorage.getItem('alias_player_name');
-    if (!savedName) {
-      // No name saved, redirect to home to enter name first
-      navigate('/');
-      return;
-    }
-    // Emit join-room event to server
-    socket.emit('join-room', { roomId: roomId.toUpperCase(), name: savedName });
+    // Navigate to room page - Room component will handle join logic
+    navigate(`/room/${roomId}`, { state: { fromLobby: true } });
   };
 
   const getStateLabel = (state) => {
