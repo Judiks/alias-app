@@ -116,10 +116,8 @@ export default function LobbyList() {
                         <span>{room.playerCount} игроков</span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className="w-3 h-3 rounded-full bg-red-500"></span>
-                        <span>{room.redPlayers}</span>
-                        <span className="w-3 h-3 rounded-full bg-blue-500"></span>
-                        <span>{room.bluePlayers}</span>
+                        <span>{room.teamCount} команд</span>
+                        {room.isPrivate && <span className="text-yellow-400">🔒</span>}
                       </div>
                     </div>
                   </div>

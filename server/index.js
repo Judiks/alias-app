@@ -26,30 +26,23 @@ function createRoom(hostId, hostName, roomName) {
     id: uuidv4().slice(0, 6).toUpperCase(),
     name: roomName || 'Моя комната',
     host: hostId,
-    teams: {
-      red: { players: [], score: 0, currentExplainerIndex: 0 },
-      blue: { players: [], score: 0, currentExplainerIndex: 0 }
-    },
+    teams: [
+      { id: 'team-1', name: 'Команда 1', color: 'red', players: [], score: 0, currentExplainerIndex: 0, emoji: '🔴' },
+      { id: 'team-2', name: 'Команда 2', color: 'blue', players: [], score: 0, currentExplainerIndex: 0, emoji: '🔵' }
+    ],
     settings: {
       roundTime: 60,
       wordsToWin: 50,
-      skipPenalty: true
+      skipPenalty: true,
+      isPrivate: false
     },
-    state: 'lobby', // lobby, playing, break, last-word, finished
+    state: 'lobby',
     roundNumber: 0,
-    currentRound: {
-      team: 'red',
-      explainer: null,
-      word: null,
-      timeLeft: 60,
-      wordsGuessed: 0,
-      wordsSkipped: 0
-    },
-    goalReached: false, // true when any team reaches wordsToWin
-    redPlayedFinal: false, // red team played their final turn
-    bluePlayedFinal: false, // blue team played their final turn
+    currentRound: null,
     words: [],
     usedWords: new Set(),
+    goalReached: false,
+    teamsPlayedFinal: new Set(),
     createdAt: Date.now()
   };
 }
@@ -69,12 +62,14 @@ app.get('/api/health', (req, res) => {
 app.get('/api/rooms', (req, res) => {
   const roomList = [];
   rooms.forEach((room, id) => {
+    const totalPlayers = room.teams.reduce((sum, team) => sum + team.players.length, 0);
     roomList.push({
       id: room.id,
+      name: room.name,
       state: room.state,
-      playerCount: room.teams.red.players.length + room.teams.blue.players.length,
-      redPlayers: room.teams.red.players.length,
-      bluePlayers: room.teams.blue.players.length,
+      playerCount: totalPlayers,
+      teamCount: room.teams.length,
+      isPrivate: room.settings.isPrivate,
       roundNumber: room.roundNumber
     });
   });
@@ -91,13 +86,14 @@ io.on('connection', (socket) => {
   socket.on('get-rooms', () => {
     const roomList = [];
     rooms.forEach((room) => {
+      const totalPlayers = room.teams.reduce((sum, team) => sum + team.players.length, 0);
       roomList.push({
         id: room.id,
         name: room.name,
         state: room.state,
-        playerCount: room.teams.red.players.length + room.teams.blue.players.length,
-        redPlayers: room.teams.red.players.length,
-        bluePlayers: room.teams.blue.players.length,
+        playerCount: totalPlayers,
+        teamCount: room.teams.length,
+        isPrivate: room.settings.isPrivate,
         roundNumber: room.roundNumber
       });
     });
@@ -110,7 +106,7 @@ io.on('connection', (socket) => {
     room.words = await getWords(2000); // Load many words, shuffled to mix all difficulty levels
     rooms.set(room.id, room);
 
-    room.teams.red.players.push({ id: socket.id, name, isHost: true });
+    room.teams[0].players.push({ id: socket.id, name, isHost: true });
     currentRoom = room.id;
     playerName = name;
 
@@ -120,9 +116,9 @@ io.on('connection', (socket) => {
   });
 
   // Join room
-  socket.on('join-room', async ({ roomId, name, team }) => {
+  socket.on('join-room', async ({ roomId, name, teamId }) => {
     const room = rooms.get(roomId.toUpperCase());
-    
+
     if (!room) {
       socket.emit('error', { message: 'Комната не найдена' });
       return;
@@ -133,31 +129,50 @@ io.on('connection', (socket) => {
       return;
     }
 
-    const targetTeam = team || (room.teams.red.players.length <= room.teams.blue.players.length ? 'red' : 'blue');
-    room.teams[targetTeam].players.push({ id: socket.id, name, isHost: false });
-    
+    // Find the team with the fewest players, or use specified team
+    let targetTeamIndex = 0;
+    if (teamId) {
+      targetTeamIndex = room.teams.findIndex(t => t.id === teamId);
+      if (targetTeamIndex === -1) targetTeamIndex = 0;
+    } else {
+      // Find team with fewest players
+      let minPlayers = Infinity;
+      room.teams.forEach((team, index) => {
+        if (team.players.length < minPlayers) {
+          minPlayers = team.players.length;
+          targetTeamIndex = index;
+        }
+      });
+    }
+
+    room.teams[targetTeamIndex].players.push({ id: socket.id, name, isHost: false });
+
     currentRoom = room.id;
     playerName = name;
-    
+
     socket.join(room.id);
-    socket.emit('room-joined', { roomId: room.id, room, team: targetTeam });
+    socket.emit('room-joined', { roomId: room.id, room, teamId: room.teams[targetTeamIndex].id });
     io.to(room.id).emit('room-updated', { room });
-    console.log(`${name} joined room ${room.id} in team ${targetTeam}`);
+    console.log(`${name} joined room ${room.id} in team ${room.teams[targetTeamIndex].name}`);
   });
 
   // Switch team
-  socket.on('switch-team', ({ team }) => {
+  socket.on('switch-team', ({ teamId }) => {
     if (!currentRoom) return;
     const room = rooms.get(currentRoom);
     if (!room || room.state !== 'lobby') return;
 
     // Remove from current team
-    ['red', 'blue'].forEach(t => {
-      room.teams[t].players = room.teams[t].players.filter(p => p.id !== socket.id);
+    room.teams.forEach(team => {
+      team.players = team.players.filter(p => p.id !== socket.id);
     });
 
     // Add to new team
-    room.teams[team].players.push({ id: socket.id, name: playerName, isHost: room.host === socket.id });
+    const targetTeam = room.teams.find(t => t.id === teamId);
+    if (targetTeam) {
+      targetTeam.players.push({ id: socket.id, name: playerName, isHost: room.host === socket.id });
+    }
+
     io.to(room.id).emit('room-updated', { room });
   });
 
@@ -171,21 +186,80 @@ io.on('connection', (socket) => {
     io.to(room.id).emit('room-updated', { room });
   });
 
+  // Add team
+  socket.on('add-team', ({ name }) => {
+    if (!currentRoom) return;
+    const room = rooms.get(currentRoom);
+    if (!room || room.host !== socket.id || room.state !== 'lobby') return;
+    if (room.teams.length >= 10) {
+      socket.emit('error', { message: 'Максимум 10 команд' });
+      return;
+    }
+
+    const teamId = `team-${Date.now()}`;
+    const colors = ['red', 'blue', 'green', 'yellow', 'purple', 'pink', 'orange', 'cyan', 'lime', 'indigo'];
+    const emojis = ['🔴', '🔵', '🟢', '🟡', '🟣', '🩷', '🟠', '🔷', '💚', '🔮'];
+    const colorIndex = room.teams.length % colors.length;
+
+    room.teams.push({
+      id: teamId,
+      name: name || `Команда ${room.teams.length + 1}`,
+      color: colors[colorIndex],
+      emoji: emojis[colorIndex],
+      players: [],
+      score: 0,
+      currentExplainerIndex: 0
+    });
+
+    io.to(room.id).emit('room-updated', { room });
+  });
+
+  // Remove team
+  socket.on('remove-team', ({ teamId }) => {
+    if (!currentRoom) return;
+    const room = rooms.get(currentRoom);
+    if (!room || room.host !== socket.id || room.state !== 'lobby') return;
+    if (room.teams.length <= 2) {
+      socket.emit('error', { message: 'Минимум 2 команды' });
+      return;
+    }
+
+    room.teams = room.teams.filter(t => t.id !== teamId);
+    io.to(room.id).emit('room-updated', { room });
+  });
+
+  // Rename team
+  socket.on('rename-team', ({ teamId, name }) => {
+    if (!currentRoom) return;
+    const room = rooms.get(currentRoom);
+    if (!room || room.host !== socket.id) return;
+
+    const team = room.teams.find(t => t.id === teamId);
+    if (team) {
+      team.name = name || team.name;
+      io.to(room.id).emit('room-updated', { room });
+    }
+  });
+
   // Start game
   socket.on('start-game', () => {
     if (!currentRoom) return;
     const room = rooms.get(currentRoom);
     if (!room || room.host !== socket.id) return;
 
-    if (room.teams.red.players.length < 1 || room.teams.blue.players.length < 1) {
-      socket.emit('error', { message: 'Нужно минимум по 1 игроку в каждой команде' });
+    // Check if at least 2 teams have players
+    const teamsWithPlayers = room.teams.filter(t => t.players.length > 0);
+    if (teamsWithPlayers.length < 2) {
+      socket.emit('error', { message: 'Нужно минимум 2 команды с игроками' });
       return;
     }
 
     room.state = 'playing';
+    room.roundNumber = 1;
     room.currentRound = {
-      team: 'red',
-      explainer: room.teams.red.players[0].id,
+      teamIndex: 0,
+      teamId: room.teams[0].id,
+      explainer: room.teams[0].players[0]?.id,
       word: getNextWord(room),
       timeLeft: room.settings.roundTime,
       wordsGuessed: 0,
@@ -263,21 +337,21 @@ io.on('connection', (socket) => {
     if (socket.id !== room.host) return;
 
     // Reset scores and state
-    room.teams.red.score = 0;
-    room.teams.blue.score = 0;
-    room.teams.red.currentExplainerIndex = 0;
-    room.teams.blue.currentExplainerIndex = 0;
+    room.teams.forEach(team => {
+      team.score = 0;
+      team.currentExplainerIndex = 0;
+    });
     room.roundNumber = 1;
     room.state = 'playing';
     room.goalReached = false;
-    room.redPlayedFinal = false;
-    room.bluePlayedFinal = false;
+    room.teamsPlayedFinal.clear();
     room.usedWords.clear();
     room.words = await getWords(500);
 
     room.currentRound = {
-      team: 'red',
-      explainer: room.teams.red.players[0]?.id,
+      teamIndex: 0,
+      teamId: room.teams[0].id,
+      explainer: room.teams[0].players[0]?.id,
       word: getNextWord(room),
       timeLeft: room.settings.roundTime,
       wordsGuessed: 0,
@@ -296,9 +370,13 @@ io.on('connection', (socket) => {
     if (socket.id !== room.host) return;
 
     room.state = 'lobby';
-    room.teams.red.score = 0;
-    room.teams.blue.score = 0;
+    room.teams.forEach(team => {
+      team.score = 0;
+      team.currentExplainerIndex = 0;
+    });
     room.roundNumber = 0;
+    room.goalReached = false;
+    room.teamsPlayedFinal.clear();
 
     io.to(room.id).emit('back-to-lobby', { room });
   });
@@ -310,8 +388,8 @@ io.on('connection', (socket) => {
     if (!room) return;
 
     // Remove player from teams
-    ['red', 'blue'].forEach(team => {
-      room.teams[team].players = room.teams[team].players.filter(p => p.id !== socket.id);
+    room.teams.forEach(team => {
+      team.players = team.players.filter(p => p.id !== socket.id);
     });
 
     // Leave socket room
@@ -319,7 +397,7 @@ io.on('connection', (socket) => {
 
     // If host left, assign new host or delete room
     if (room.host === socket.id) {
-      const allPlayers = [...room.teams.red.players, ...room.teams.blue.players];
+      const allPlayers = room.teams.flatMap(team => team.players);
       if (allPlayers.length > 0) {
         room.host = allPlayers[0].id;
         allPlayers[0].isHost = true;
@@ -338,18 +416,18 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => {
     console.log('User disconnected:', socket.id);
     if (!currentRoom) return;
-    
+
     const room = rooms.get(currentRoom);
     if (!room) return;
 
     // Remove player from teams
-    ['red', 'blue'].forEach(team => {
-      room.teams[team].players = room.teams[team].players.filter(p => p.id !== socket.id);
+    room.teams.forEach(team => {
+      team.players = team.players.filter(p => p.id !== socket.id);
     });
 
     // If host left, assign new host or delete room
     if (room.host === socket.id) {
-      const allPlayers = [...room.teams.red.players, ...room.teams.blue.players];
+      const allPlayers = room.teams.flatMap(team => team.players);
       if (allPlayers.length > 0) {
         room.host = allPlayers[0].id;
         allPlayers[0].isHost = true;
@@ -419,47 +497,44 @@ function startLastWordTimer(room) {
 }
 
 function nextTurn(room) {
-  const currentTeam = room.currentRound.team;
-  const nextTeam = currentTeam === 'red' ? 'blue' : 'red';
-  
-  // Check win conditions:
-  // Red always plays first in a round, then blue
-  // If RED reaches goal on their turn -> blue gets final chance
-  // If BLUE reaches goal on their turn -> game ends immediately (red already played)
-  
+  const currentTeamIndex = room.currentRound.teamIndex;
+  const nextTeamIndex = (currentTeamIndex + 1) % room.teams.length;
+
+  // Check win conditions with multiple teams
   if (room.goalReached) {
-    if (currentTeam === 'red') {
-      // Red just finished, mark it and give blue final chance
-      room.redPlayedFinal = true;
-    } else {
-      // Blue just finished their turn
-      if (room.redPlayedFinal) {
-        // Red reached goal, blue had their final chance - game over
-        endGame(room);
-        return;
-      } else {
-        // Blue reached goal first on their turn - red already played this round, game over
-        endGame(room);
-        return;
-      }
+    const currentTeamId = room.teams[currentTeamIndex].id;
+    if (!room.teamsPlayedFinal.has(currentTeamId)) {
+      room.teamsPlayedFinal.add(currentTeamId);
+    }
+
+    // Check if all teams have played their final turn
+    const allTeamsPlayedFinal = room.teams.every(team => room.teamsPlayedFinal.has(team.id));
+    if (allTeamsPlayedFinal) {
+      endGame(room);
+      return;
     }
   }
-  
-  // Increment round number when switching back to red
-  if (nextTeam === 'red') {
+
+  // Increment round number when cycling back to first team
+  if (nextTeamIndex === 0) {
     room.roundNumber++;
   }
-  
-  // Get next explainer from the team (rotate through players)
-  const teamData = room.teams[nextTeam];
-  if (teamData.players.length === 0) {
-    endGame(room);
+
+  // Get next team
+  const nextTeam = room.teams[nextTeamIndex];
+  if (nextTeam.players.length === 0) {
+    // Skip empty teams
+    if (room.teams.every(t => t.players.length === 0)) {
+      endGame(room);
+      return;
+    }
+    nextTurn(room);
     return;
   }
-  
+
   // Move to next explainer in the team
-  teamData.currentExplainerIndex = (teamData.currentExplainerIndex + 1) % teamData.players.length;
-  const nextExplainer = teamData.players[teamData.currentExplainerIndex];
+  nextTeam.currentExplainerIndex = (nextTeam.currentExplainerIndex + 1) % nextTeam.players.length;
+  const nextExplainer = nextTeam.players[nextTeam.currentExplainerIndex];
 
   if (!nextExplainer) {
     endGame(room);
@@ -469,41 +544,43 @@ function nextTurn(room) {
   // Set break state
   room.state = 'break';
   room.currentRound = {
-    team: nextTeam,
+    teamIndex: nextTeamIndex,
+    teamId: nextTeam.id,
     explainer: nextExplainer.id,
     word: null,
-    timeLeft: 10, // 10 second break
+    timeLeft: 10,
     wordsGuessed: 0,
     wordsSkipped: 0
   };
 
-  // Notify if this is the final chance for the other team
-  const isFinalChance = room.goalReached && !room[`${nextTeam}PlayedFinal`];
-  
-  io.to(room.id).emit('break-started', { 
-    room, 
-    nextTeam, 
+  const isFinalChance = room.goalReached && !room.teamsPlayedFinal.has(nextTeam.id);
+
+  io.to(room.id).emit('break-started', {
+    room,
+    teamIndex: nextTeamIndex,
+    teamId: nextTeam.id,
+    teamName: nextTeam.name,
     explainerName: nextExplainer.name,
-    isFinalChance 
+    isFinalChance
   });
-  
-  // Start break countdown
+
   let breakTime = 10;
   const breakInterval = setInterval(() => {
     breakTime--;
     io.to(room.id).emit('break-tick', { timeLeft: breakTime });
-    
+
     if (breakTime <= 0) {
       clearInterval(breakInterval);
-      startActualTurn(room, nextTeam, nextExplainer);
+      startActualTurn(room, nextTeamIndex, nextTeam, nextExplainer);
     }
   }, 1000);
 }
 
-function startActualTurn(room, team, explainer) {
+function startActualTurn(room, teamIndex, team, explainer) {
   room.state = 'playing';
   room.currentRound = {
-    team: team,
+    teamIndex: teamIndex,
+    teamId: team.id,
     explainer: explainer.id,
     word: getNextWord(room),
     timeLeft: room.settings.roundTime,
@@ -511,15 +588,24 @@ function startActualTurn(room, team, explainer) {
     wordsSkipped: 0
   };
 
-  io.to(room.id).emit('turn-changed', { room });
+  io.to(room.id).emit('turn-started', { room, teamIndex, teamId: team.id, teamName: team.name, explainerName: explainer.name });
   startRoundTimer(room);
 }
 
 function endGame(room) {
   room.state = 'finished';
-  const winner = room.teams.red.score > room.teams.blue.score ? 'red' : 
-                 room.teams.blue.score > room.teams.red.score ? 'blue' : 'tie';
-  
+
+  // Find winning team(s)
+  let maxScore = -1;
+  room.teams.forEach(team => {
+    if (team.score > maxScore) {
+      maxScore = team.score;
+    }
+  });
+
+  const winners = room.teams.filter(team => team.score === maxScore);
+  const winner = winners.length === 1 ? winners[0] : null; // null if tie
+
   io.to(room.id).emit('game-ended', { room, winner });
 }
 

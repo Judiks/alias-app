@@ -22,9 +22,17 @@ export default function Game() {
   
   // Compute these from room state directly
   const isExplainer = room?.currentRound?.explainer === socket.id;
-  const inRed = room?.teams?.red?.players?.find(p => p.id === socket.id);
-  const inBlue = room?.teams?.blue?.players?.find(p => p.id === socket.id);
-  const myTeam = inRed ? 'red' : inBlue ? 'blue' : null;
+  let myTeam = null;
+  let myTeamData = null;
+  if (room?.teams) {
+    room.teams.forEach(team => {
+      const player = team.players.find(p => p.id === socket.id);
+      if (player) {
+        myTeam = team.id;
+        myTeamData = team;
+      }
+    });
+  }
 
   useEffect(() => {
     // If no room data and page was accessed directly, redirect to room
@@ -73,10 +81,10 @@ export default function Game() {
       setTimeLeft(newTime);
     });
 
-    socket.on('break-started', ({ room: newRoom, nextTeam, explainerName, isFinalChance }) => {
+    socket.on('break-started', ({ room: newRoom, teamIndex, teamId, teamName, explainerName, isFinalChance }) => {
       setRoom(newRoom);
       setIsBreak(true);
-      setBreakInfo({ nextTeam, explainerName, isFinalChance });
+      setBreakInfo({ teamIndex, teamId, teamName, explainerName, isFinalChance });
       setTimeLeft(10);
     });
 
@@ -182,11 +190,9 @@ export default function Game() {
 
   // Break screen between turns
   if (isBreak && breakInfo) {
-    const nextTeamName = breakInfo.nextTeam === 'red' ? 'Красные' : 'Синие';
-    const nextTeamColor = breakInfo.nextTeam === 'red' ? 'red' : 'blue';
-    const enemyTeam = breakInfo.nextTeam === 'red' ? 'blue' : 'red';
-    const enemyScore = room?.teams?.[enemyTeam]?.score || 0;
-    
+    const nextTeamName = breakInfo.teamName;
+    const nextTeamData = room?.teams?.find(t => t.id === breakInfo.teamId);
+
     return (
       <div className="min-h-screen flex items-center justify-center p-4">
         <div className="bg-white/10 backdrop-blur-lg rounded-3xl p-8 text-center max-w-md w-full">
@@ -195,7 +201,7 @@ export default function Game() {
               <div className="text-6xl mb-4">🔥</div>
               <h1 className="text-3xl font-bold mb-2 text-yellow-400">Финальный шанс!</h1>
               <p className="text-indigo-300 mb-4">
-                Соперники набрали {enemyScore} очков. Догоните их!
+                Последний шанс догнать лидеров!
               </p>
             </>
           ) : (
@@ -204,31 +210,26 @@ export default function Game() {
               <h1 className="text-3xl font-bold mb-4">Перерыв</h1>
             </>
           )}
-          
-          <div className={`inline-block px-4 py-2 rounded-full mb-4 ${
-            nextTeamColor === 'red' ? 'bg-red-500/30 text-red-300' : 'bg-blue-500/30 text-blue-300'
-          }`}>
+
+          <div className={`inline-block px-4 py-2 rounded-full mb-4 bg-${nextTeamData?.color || 'gray'}-500/30 text-${nextTeamData?.color || 'gray'}-300`}>
             Следующий ход: <strong>{nextTeamName}</strong>
           </div>
-          
+
           <div className="text-indigo-300 mb-6">
             Объясняет: <strong>{breakInfo.explainerName}</strong>
           </div>
-          
+
           <div className="text-6xl font-mono font-bold mb-4">{timeLeft}</div>
           <div className="text-indigo-400">Приготовьтесь!</div>
-          
+
           {/* Current scores */}
-          <div className="flex justify-center gap-8 mt-6">
-            <div className="text-center">
-              <div className="text-red-400 text-sm">Красные</div>
-              <div className="text-2xl font-bold text-red-300">{room?.teams?.red?.score || 0}</div>
-            </div>
-            <div className="text-xl text-white/50">:</div>
-            <div className="text-center">
-              <div className="text-blue-400 text-sm">Синие</div>
-              <div className="text-2xl font-bold text-blue-300">{room?.teams?.blue?.score || 0}</div>
-            </div>
+          <div className="flex flex-wrap justify-center gap-4 mt-6">
+            {room?.teams?.map((team) => (
+              <div key={team.id} className="text-center">
+                <div className="text-sm">{team.emoji} {team.name}</div>
+                <div className="text-2xl font-bold">{team.score}</div>
+              </div>
+            ))}
           </div>
         </div>
       </div>
@@ -240,22 +241,19 @@ export default function Game() {
       <div className="min-h-screen flex items-center justify-center p-4">
         <div className="bg-white/10 backdrop-blur-lg rounded-3xl p-8 text-center max-w-md w-full">
           <Trophy className={`w-24 h-24 mx-auto mb-4 ${
-            winner === 'red' ? 'text-red-400' : winner === 'blue' ? 'text-blue-400' : 'text-yellow-400'
+            winner ? 'text-yellow-400' : 'text-gray-400'
           }`} />
           <h1 className="text-4xl font-bold mb-4">
-            {winner === 'tie' ? 'Ничья!' : winner === 'red' ? 'Красные победили!' : 'Синие победили!'}
+            {winner ? `${winner.emoji} ${winner.name} победили!` : 'Ничья!'}
           </h1>
           <div className="text-indigo-300 mb-2">Раунд: {room.roundNumber || 1}</div>
-          <div className="flex justify-center gap-8 mb-8">
-            <div className="text-center">
-              <div className="text-red-400 text-sm">Красные</div>
-              <div className="text-4xl font-bold text-red-300">{room.teams.red.score}</div>
-            </div>
-            <div className="text-3xl text-white/50">:</div>
-            <div className="text-center">
-              <div className="text-blue-400 text-sm">Синие</div>
-              <div className="text-4xl font-bold text-blue-300">{room.teams.blue.score}</div>
-            </div>
+          <div className="flex flex-wrap justify-center gap-4 mb-8">
+            {room?.teams?.map((team) => (
+              <div key={team.id} className={`text-center ${winner?.id === team.id ? 'scale-110' : ''}`}>
+                <div className="text-sm">{team.emoji} {team.name}</div>
+                <div className="text-4xl font-bold">{team.score}</div>
+              </div>
+            ))}
           </div>
           {isHost ? (
             <div className="space-y-3">
@@ -283,12 +281,13 @@ export default function Game() {
     );
   }
 
-  const currentTeamName = room.currentRound?.team === 'red' ? 'Красные' : 'Синие';
-  const currentTeamColor = room.currentRound?.team === 'red' ? 'red' : 'blue';
-  const explainerName = [...room.teams.red.players, ...room.teams.blue.players]
+  const currentTeamData = room?.teams?.find(t => t.id === room.currentRound?.teamId);
+  const currentTeamName = currentTeamData?.name || 'Команда';
+  const currentTeamColor = currentTeamData?.color || 'gray';
+  const explainerName = room?.teams?.flatMap(t => t.players)
     .find(p => p.id === room.currentRound?.explainer)?.name || 'Игрок';
 
-  const isMyTeamTurn = myTeam === room.currentRound?.team;
+  const isMyTeamTurn = myTeam === room.currentRound?.teamId;
 
   return (
     <div className="min-h-screen p-4 flex flex-col">
@@ -300,15 +299,13 @@ export default function Game() {
       </div>
 
       {/* Score Board */}
-      <div className="flex justify-center gap-8 mb-4">
-        <div className={`text-center px-6 py-2 rounded-xl ${room.currentRound?.team === 'red' ? 'bg-red-500/40 ring-2 ring-red-400' : 'bg-red-500/20'}`}>
-          <div className="text-red-300 text-sm">Красные</div>
-          <div className="text-3xl font-bold">{room.teams.red.score}/{room.settings?.wordsToWin || 50}</div>
-        </div>
-        <div className={`text-center px-6 py-2 rounded-xl ${room.currentRound?.team === 'blue' ? 'bg-blue-500/40 ring-2 ring-blue-400' : 'bg-blue-500/20'}`}>
-          <div className="text-blue-300 text-sm">Синие</div>
-          <div className="text-3xl font-bold">{room.teams.blue.score}/{room.settings?.wordsToWin || 50}</div>
-        </div>
+      <div className="flex flex-wrap justify-center gap-4 mb-4">
+        {room?.teams?.map((team) => (
+          <div key={team.id} className={`text-center px-4 py-2 rounded-xl ${room.currentRound?.teamId === team.id ? 'bg-white/40 ring-2 ring-white' : 'bg-white/10'}`}>
+            <div className="text-sm">{team.emoji} {team.name}</div>
+            <div className="text-2xl font-bold">{team.score}/{room.settings?.wordsToWin || 50}</div>
+          </div>
+        ))}
       </div>
 
       {/* Timer */}
@@ -333,10 +330,8 @@ export default function Game() {
 
       {/* Current Turn Info */}
       <div className="text-center mb-6">
-        <div className={`inline-block px-4 py-2 rounded-full ${
-          currentTeamColor === 'red' ? 'bg-red-500/30 text-red-300' : 'bg-blue-500/30 text-blue-300'
-        }`}>
-          Ход команды: <strong>{currentTeamName}</strong>
+        <div className={`inline-block px-4 py-2 rounded-full bg-${currentTeamColor}-500/30 text-${currentTeamColor}-300`}>
+          Ход команды: <strong>{currentTeamData?.emoji} {currentTeamName}</strong>
         </div>
         <div className="text-indigo-300 mt-2">
           Объясняет: <strong>{explainerName}</strong>

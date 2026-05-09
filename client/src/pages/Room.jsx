@@ -22,6 +22,7 @@ export default function Room() {
   const [needsJoin, setNeedsJoin] = useState(false);
   const [joinName, setJoinName] = useState('');
   const [isReconnecting, setIsReconnecting] = useState(false);
+  const [newTeamName, setNewTeamName] = useState('');
 
   // If returning from game, update status from room data
   useEffect(() => {
@@ -103,9 +104,12 @@ export default function Room() {
   };
 
   const updateMyStatus = (room) => {
-    const inRed = room.teams.red.players.find(p => p.id === socket.id);
-    const inBlue = room.teams.blue.players.find(p => p.id === socket.id);
-    setMyTeam(inRed ? 'red' : inBlue ? 'blue' : null);
+    let foundTeamId = null;
+    room.teams.forEach(team => {
+      const player = team.players.find(p => p.id === socket.id);
+      if (player) foundTeamId = team.id;
+    });
+    setMyTeam(foundTeamId);
     setIsHost(room.host === socket.id);
   };
 
@@ -117,8 +121,8 @@ export default function Room() {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const switchTeam = (team) => {
-    socket.emit('switch-team', { team });
+  const switchTeam = (teamId) => {
+    socket.emit('switch-team', { teamId });
   };
 
   const updateSettings = (settings) => {
@@ -127,6 +131,20 @@ export default function Room() {
 
   const startGame = () => {
     socket.emit('start-game');
+  };
+
+  const addTeam = () => {
+    if (!newTeamName.trim()) return;
+    socket.emit('add-team', { name: newTeamName.trim() });
+    setNewTeamName('');
+  };
+
+  const removeTeam = (teamId) => {
+    socket.emit('remove-team', { teamId });
+  };
+
+  const renameTeam = (teamId, name) => {
+    socket.emit('rename-team', { teamId, name });
   };
 
   const leaveRoom = () => {
@@ -181,7 +199,7 @@ export default function Room() {
     );
   }
 
-  const canStart = room.teams.red.players.length >= 1 && room.teams.blue.players.length >= 1;
+  const canStart = room.teams.filter(t => t.players.length > 0).length >= 2;
 
   return (
     <div className="min-h-screen p-4">
@@ -226,7 +244,7 @@ export default function Room() {
             <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
               <Settings className="w-5 h-5" /> Настройки игры
             </h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
               <div>
                 <label className="block text-sm text-indigo-200 mb-2">Время раунда (сек)</label>
                 <input
@@ -250,93 +268,109 @@ export default function Room() {
                 />
               </div>
               <div>
-                <label className="block text-sm text-indigo-200 mb-2">Штраф за пропуск</label>
+                <label className="block text-sm text-indigo-200 mb-2">Приватная комната</label>
                 <button
-                  onClick={() => updateSettings({ skipPenalty: !room.settings.skipPenalty })}
+                  onClick={() => updateSettings({ isPrivate: !room.settings.isPrivate })}
                   className={`w-full px-4 py-2 rounded-lg border transition-all ${
-                    room.settings.skipPenalty
-                      ? 'bg-red-500/30 border-red-500 text-red-300'
+                    room.settings.isPrivate
+                      ? 'bg-yellow-500/30 border-yellow-500 text-yellow-300'
                       : 'bg-green-500/30 border-green-500 text-green-300'
                   }`}
                 >
-                  {room.settings.skipPenalty ? 'Включен (-1 очко)' : 'Выключен'}
+                  {room.settings.isPrivate ? '🔒 Приватная' : '🔓 Публичная'}
                 </button>
               </div>
+            </div>
+
+            {/* Team Management */}
+            <div className="border-t border-white/20 pt-4">
+              <h4 className="text-md font-semibold mb-3 flex items-center gap-2">
+                <Users className="w-4 h-4" /> Управление командами
+              </h4>
+              <div className="flex gap-2 mb-4">
+                <input
+                  type="text"
+                  value={newTeamName}
+                  onChange={(e) => setNewTeamName(e.target.value)}
+                  placeholder="Название новой команды"
+                  className="flex-1 px-4 py-2 rounded-lg bg-white/10 border border-white/20 text-white placeholder-white/50"
+                  maxLength={20}
+                />
+                <button
+                  onClick={addTeam}
+                  disabled={room.teams.length >= 10 || !newTeamName.trim()}
+                  className="px-4 py-2 bg-green-500 hover:bg-green-600 rounded-lg font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Добавить
+                </button>
+              </div>
+              <div className="space-y-2">
+                {room.teams.map((team) => (
+                  <div key={team.id} className="flex items-center gap-2 bg-white/5 rounded-lg p-2">
+                    <span className="text-xl">{team.emoji}</span>
+                    <input
+                      type="text"
+                      value={team.name}
+                      onChange={(e) => renameTeam(team.id, e.target.value)}
+                      className="flex-1 px-3 py-1 rounded bg-white/10 border border-white/20 text-white text-sm"
+                      maxLength={20}
+                    />
+                    <button
+                      onClick={() => removeTeam(team.id)}
+                      disabled={room.teams.length <= 2}
+                      className="px-3 py-1 bg-red-500/50 hover:bg-red-500 rounded text-white text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Удалить
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-indigo-300 mt-2">Минимум 2 команды, максимум 10</p>
             </div>
           </div>
         )}
 
         {/* Teams */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-          {/* Red Team */}
-          <div className={`bg-gradient-to-br from-red-500/30 to-red-600/20 backdrop-blur rounded-2xl p-6 border-2 ${myTeam === 'red' ? 'border-red-400' : 'border-transparent'}`}>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xl font-bold text-red-300 flex items-center gap-2">
-                <Users className="w-5 h-5" /> Красные
-              </h3>
-              <span className="text-2xl font-bold">{room.teams.red.players.length}</span>
-            </div>
-            <div className="space-y-2 mb-4 min-h-[100px]">
-              {room.teams.red.players.map((player) => (
-                <div
-                  key={player.id}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-lg ${
-                    player.id === socket.id ? 'bg-red-500/40' : 'bg-white/10'
-                  }`}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
+          {room.teams.map((team) => (
+            <div
+              key={team.id}
+              className={`bg-gradient-to-br from-${team.color}-500/30 to-${team.color}-600/20 backdrop-blur rounded-2xl p-6 border-2 ${myTeam === team.id ? `border-${team.color}-400` : 'border-transparent'}`}
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xl font-bold text-${team.color}-300 flex items-center gap-2">
+                  <span className="text-2xl">{team.emoji}</span>
+                  {team.name}
+                </h3>
+                <span className="text-2xl font-bold">{team.players.length}</span>
+              </div>
+              <div className="space-y-2 mb-4 min-h-[100px]">
+                {team.players.map((player) => (
+                  <div
+                    key={player.id}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-lg ${
+                      player.id === socket.id ? `bg-${team.color}-500/40` : 'bg-white/10'
+                    }`}
+                  >
+                    {player.isHost && <Crown className="w-4 h-4 text-yellow-400" />}
+                    <span>{player.name}</span>
+                    {player.id === socket.id && <span className="text-xs text-red-300">(вы)</span>}
+                  </div>
+                ))}
+                {team.players.length === 0 && (
+                  <div className="text-white/50 text-center py-4">Нет игроков</div>
+                )}
+              </div>
+              {myTeam !== team.id && room.state === 'lobby' && (
+                <button
+                  onClick={() => switchTeam(team.id)}
+                  className={`w-full py-2 bg-${team.color}-500 hover:bg-${team.color}-600 rounded-lg font-semibold transition-all`}
                 >
-                  {player.isHost && <Crown className="w-4 h-4 text-yellow-400" />}
-                  <span>{player.name}</span>
-                  {player.id === socket.id && <span className="text-xs text-red-300">(вы)</span>}
-                </div>
-              ))}
-              {room.teams.red.players.length === 0 && (
-                <div className="text-white/50 text-center py-4">Нет игроков</div>
+                  Присоединиться
+                </button>
               )}
             </div>
-            {myTeam !== 'red' && (
-              <button
-                onClick={() => switchTeam('red')}
-                className="w-full py-2 bg-red-500 hover:bg-red-600 rounded-lg font-semibold transition-all"
-              >
-                Присоединиться
-              </button>
-            )}
-          </div>
-
-          {/* Blue Team */}
-          <div className={`bg-gradient-to-br from-blue-500/30 to-blue-600/20 backdrop-blur rounded-2xl p-6 border-2 ${myTeam === 'blue' ? 'border-blue-400' : 'border-transparent'}`}>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xl font-bold text-blue-300 flex items-center gap-2">
-                <Users className="w-5 h-5" /> Синие
-              </h3>
-              <span className="text-2xl font-bold">{room.teams.blue.players.length}</span>
-            </div>
-            <div className="space-y-2 mb-4 min-h-[100px]">
-              {room.teams.blue.players.map((player) => (
-                <div
-                  key={player.id}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-lg ${
-                    player.id === socket.id ? 'bg-blue-500/40' : 'bg-white/10'
-                  }`}
-                >
-                  {player.isHost && <Crown className="w-4 h-4 text-yellow-400" />}
-                  <span>{player.name}</span>
-                  {player.id === socket.id && <span className="text-xs text-blue-300">(вы)</span>}
-                </div>
-              ))}
-              {room.teams.blue.players.length === 0 && (
-                <div className="text-white/50 text-center py-4">Нет игроков</div>
-              )}
-            </div>
-            {myTeam !== 'blue' && (
-              <button
-                onClick={() => switchTeam('blue')}
-                className="w-full py-2 bg-blue-500 hover:bg-blue-600 rounded-lg font-semibold transition-all"
-              >
-                Присоединиться
-              </button>
-            )}
-          </div>
+          ))}
         </div>
 
         {/* Start Button */}
