@@ -244,57 +244,61 @@ export default function Game() {
 
       {/* Word Card */}
       <div className="flex-1 flex items-center justify-center">
-        {isExplainer ? (
-          <div className="w-full max-w-lg">
-            <div className="bg-gradient-to-br from-white/20 to-white/5 backdrop-blur-lg rounded-3xl p-8 text-center shadow-2xl">
-              <div className="text-sm text-indigo-300 mb-2">Объясните это слово:</div>
-              <div className="text-5xl md:text-6xl font-bold mb-8 text-shadow break-words">
-                {currentWord}
-              </div>
-              <div className="flex gap-4">
-                <button
-                  onClick={handleSkip}
-                  className="flex-1 py-4 bg-gradient-to-r from-orange-500 to-red-500 rounded-2xl font-bold text-xl hover:from-orange-600 hover:to-red-600 transition-all transform hover:scale-105 active:scale-95"
-                >
-                  <X className="inline-block w-6 h-6 mr-2" />
-                  Пропустить
-                </button>
-                <button
-                  onClick={handleCorrect}
-                  className="flex-1 py-4 bg-gradient-to-r from-green-400 to-emerald-500 rounded-2xl font-bold text-xl hover:from-green-500 hover:to-emerald-600 transition-all transform hover:scale-105 active:scale-95"
-                >
-                  <Check className="inline-block w-6 h-6 mr-2" />
-                  Угадали!
-                </button>
-              </div>
-            </div>
-            <div className="text-center mt-4 text-indigo-300 text-sm">
-              Угадано: {room.currentRound?.wordsGuessed || 0} | Пропущено: {room.currentRound?.wordsSkipped || 0}
-            </div>
+        <div className="w-full max-w-lg">
+          <div className="bg-gradient-to-br from-white/20 to-white/5 backdrop-blur-lg rounded-3xl p-8 text-center shadow-2xl">
+            
+            {/* Explainer view - shows word and buttons */}
+            {isExplainer && (
+              <>
+                <div className="text-sm text-indigo-300 mb-2">Объясните это слово:</div>
+                <div className="text-5xl md:text-6xl font-bold mb-8 text-shadow break-words">
+                  {currentWord || room.currentRound?.word || '...'}
+                </div>
+                <div className="flex gap-4">
+                  <button
+                    onClick={handleSkip}
+                    className="flex-1 py-4 bg-gradient-to-r from-orange-500 to-red-500 rounded-2xl font-bold text-xl hover:from-orange-600 hover:to-red-600 transition-all transform hover:scale-105 active:scale-95"
+                  >
+                    <X className="inline-block w-6 h-6 mr-2" />
+                    Пропустить
+                  </button>
+                  <button
+                    onClick={handleCorrect}
+                    className="flex-1 py-4 bg-gradient-to-r from-green-400 to-emerald-500 rounded-2xl font-bold text-xl hover:from-green-500 hover:to-emerald-600 transition-all transform hover:scale-105 active:scale-95"
+                  >
+                    <Check className="inline-block w-6 h-6 mr-2" />
+                    Угадали!
+                  </button>
+                </div>
+              </>
+            )}
+            
+            {/* Guessing team - can't see word */}
+            {!isExplainer && isMyTeamTurn && (
+              <>
+                <div className="text-6xl mb-4">🎯</div>
+                <div className="text-2xl font-bold mb-2">Угадывайте!</div>
+                <div className="text-indigo-300">
+                  {explainerName} объясняет слово
+                </div>
+              </>
+            )}
+            
+            {/* Enemy team - can see word for proof */}
+            {!isExplainer && !isMyTeamTurn && (
+              <>
+                <div className="text-sm text-indigo-300 mb-2">Текущее слово (для проверки):</div>
+                <div className="text-5xl md:text-6xl font-bold mb-4 text-shadow break-words">
+                  {currentWord || room.currentRound?.word || '...'}
+                </div>
+                <div className="text-indigo-400">⏳ Ход соперников</div>
+              </>
+            )}
           </div>
-        ) : (
-          <div className="text-center">
-            <div className="bg-white/10 backdrop-blur-lg rounded-3xl p-12">
-              {isMyTeamTurn ? (
-                <>
-                  <div className="text-6xl mb-4">🎯</div>
-                  <div className="text-2xl font-bold mb-2">Угадывайте слово!</div>
-                  <div className="text-indigo-300">
-                    {explainerName} объясняет слово вашей команде
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="text-6xl mb-4">⏳</div>
-                  <div className="text-2xl font-bold mb-2">Ход соперников</div>
-                  <div className="text-indigo-300">
-                    Дождитесь своего хода
-                  </div>
-                </>
-              )}
-            </div>
+          <div className="text-center mt-4 text-indigo-300 text-sm">
+            Угадано: {room.currentRound?.wordsGuessed || 0} | Пропущено: {room.currentRound?.wordsSkipped || 0}
           </div>
-        )}
+        </div>
       </div>
 
       {/* Goal */}

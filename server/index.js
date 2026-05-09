@@ -165,6 +165,7 @@ io.on('connection', (socket) => {
     const room = rooms.get(currentRoom);
     if (!room || room.state !== 'playing') return;
     if (socket.id !== room.currentRound.explainer) return;
+    if (room.currentRound.timeLeft <= 0) return; // Can't guess after time is up
 
     room.teams[room.currentRound.team].score++;
     room.currentRound.wordsGuessed++;
@@ -188,6 +189,7 @@ io.on('connection', (socket) => {
     const room = rooms.get(currentRoom);
     if (!room || room.state !== 'playing') return;
     if (socket.id !== room.currentRound.explainer) return;
+    if (room.currentRound.timeLeft <= 0) return; // Can't skip after time is up
 
     if (room.settings.skipPenalty) {
       room.teams[room.currentRound.team].score = Math.max(0, room.teams[room.currentRound.team].score - 1);
