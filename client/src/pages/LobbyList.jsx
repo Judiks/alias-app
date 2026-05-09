@@ -11,6 +11,11 @@ export default function LobbyList() {
   const [joinName, setJoinName] = useState('');
   const [showJoinForm, setShowJoinForm] = useState(false);
 
+  const fetchRooms = () => {
+    setLoading(true);
+    socket.emit('get-rooms');
+  };
+
   useEffect(() => {
     // Request rooms list via socket
     socket.emit('get-rooms');
@@ -25,8 +30,14 @@ export default function LobbyList() {
       socket.emit('get-rooms');
     }, 5000);
 
+    // Timeout fallback
+    const timeout = setTimeout(() => {
+      setLoading(false);
+    }, 3000);
+
     return () => {
       clearInterval(interval);
+      clearTimeout(timeout);
       socket.off('rooms-list');
     };
   }, []);
