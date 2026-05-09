@@ -40,8 +40,8 @@ export default function Room() {
       setIsHost(true);
     });
 
-    socket.on('game-started', ({ room }) => {
-      navigate(`/game/${roomId}`);
+    socket.on('game-started', ({ room: gameRoom }) => {
+      navigate(`/game/${roomId}`, { state: { room: gameRoom } });
     });
 
     socket.on('error', ({ message }) => {
