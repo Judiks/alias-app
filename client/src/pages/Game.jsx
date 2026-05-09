@@ -29,24 +29,31 @@ export default function Game() {
     }
     
     if (initialRoom) {
-      updateGameState(initialRoom);
+      updateGameState(initialRoom, true);
     }
   }, [room, initialRoom, roomId, navigate]);
 
   useEffect(() => {
     socket.on('game-started', ({ room }) => {
       setRoom(room);
-      updateGameState(room);
+      updateGameState(room, true);
     });
 
     socket.on('room-updated', ({ room }) => {
       setRoom(room);
-      updateGameState(room);
+      updateGameState(room, false);
     });
 
     socket.on('turn-changed', ({ room }) => {
       setRoom(room);
-      updateGameState(room);
+      // Force update explainer status
+      setIsExplainer(room.currentRound?.explainer === socket.id);
+      if (room.currentRound?.explainer === socket.id) {
+        setCurrentWord(room.currentRound.word);
+      } else {
+        setCurrentWord('');
+      }
+      setTimeLeft(room.currentRound?.timeLeft || 60);
     });
 
     socket.on('timer-tick', ({ timeLeft }) => {
@@ -70,7 +77,7 @@ export default function Game() {
       setRoom(room);
       setGameEnded(false);
       setWinner(null);
-      updateGameState(room);
+      updateGameState(room, true);
     });
 
     socket.on('back-to-lobby', ({ room }) => {
@@ -89,7 +96,7 @@ export default function Game() {
     };
   }, [navigate]);
 
-  const updateGameState = (room) => {
+  const updateGameState = (room, updateTimer = false) => {
     if (!room) return;
     
     const inRed = room.teams.red.players.find(p => p.id === socket.id);
@@ -97,7 +104,11 @@ export default function Game() {
     setMyTeam(inRed ? 'red' : inBlue ? 'blue' : null);
     
     setIsExplainer(room.currentRound?.explainer === socket.id);
-    setTimeLeft(room.currentRound?.timeLeft || 60);
+    
+    // Only update timer on turn change or game start
+    if (updateTimer) {
+      setTimeLeft(room.currentRound?.timeLeft || 60);
+    }
     
     if (room.currentRound?.explainer === socket.id) {
       setCurrentWord(room.currentRound.word);
