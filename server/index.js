@@ -320,6 +320,7 @@ io.on('connection', (socket) => {
       const allPlayers = [...room.teams.red.players, ...room.teams.blue.players];
       if (allPlayers.length > 0) {
         room.host = allPlayers[0].id;
+        allPlayers[0].isHost = true;
         io.to(room.id).emit('room-updated', { room });
       } else {
         rooms.delete(room.id);
