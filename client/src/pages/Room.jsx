@@ -21,6 +21,7 @@ export default function Room() {
   const [isHost, setIsHost] = useState(initialIsHost);
   const [needsJoin, setNeedsJoin] = useState(false);
   const [joinName, setJoinName] = useState('');
+  const [isReconnecting, setIsReconnecting] = useState(false);
 
   // If returning from game, update status from room data
   useEffect(() => {
@@ -28,6 +29,17 @@ export default function Room() {
       updateMyStatus(initialRoom);
     }
   }, [fromGame, initialRoom]);
+
+  // Try to reconnect from localStorage on page load
+  useEffect(() => {
+    const savedRoomId = localStorage.getItem('alias_room_id');
+    const savedName = localStorage.getItem('alias_player_name');
+    
+    if (savedRoomId && savedName && roomId.toUpperCase() === savedRoomId.toUpperCase() && !initialRoom && !fromGame) {
+      setIsReconnecting(true);
+      socket.emit('join-room', { roomId: roomId.toUpperCase(), name: savedName });
+    }
+  }, [roomId, initialRoom, fromGame]);
 
   useEffect(() => {
     socket.on('room-updated', ({ room }) => {
@@ -39,13 +51,21 @@ export default function Room() {
       setRoom(room);
       setMyTeam(team);
       setNeedsJoin(false);
+      setIsReconnecting(false);
       updateMyStatus(room);
+      // Save to localStorage for reconnection
+      localStorage.setItem('alias_room_id', room.id);
+      localStorage.setItem('alias_player_name', room.teams[team]?.players?.find(p => p.id === socket.id)?.name || '');
     });
 
     socket.on('room-created', ({ room }) => {
       setRoom(room);
       setMyTeam('red');
       setIsHost(true);
+      // Save to localStorage for reconnection
+      const myName = room.teams.red.players.find(p => p.id === socket.id)?.name || '';
+      localStorage.setItem('alias_room_id', room.id);
+      localStorage.setItem('alias_player_name', myName);
     });
 
     socket.on('game-started', ({ room: gameRoom }) => {

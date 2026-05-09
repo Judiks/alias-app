@@ -4,6 +4,7 @@ import { socket, connectSocket } from './socket';
 import Home from './pages/Home';
 import Room from './pages/Room';
 import Game from './pages/Game';
+import LobbyList from './pages/LobbyList';
 
 function App() {
   const [connected, setConnected] = useState(false);
@@ -24,6 +25,7 @@ function App() {
     <div className="min-h-screen text-white">
       <Routes>
         <Route path="/" element={<Home />} />
+        <Route path="/lobbies" element={<LobbyList />} />
         <Route path="/room/:roomId" element={<Room />} />
         <Route path="/game/:roomId" element={<Game />} />
       </Routes>

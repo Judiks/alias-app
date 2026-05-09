@@ -64,6 +64,22 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', rooms: rooms.size });
 });
 
+// Get list of all active rooms
+app.get('/api/rooms', (req, res) => {
+  const roomList = [];
+  rooms.forEach((room, id) => {
+    roomList.push({
+      id: room.id,
+      state: room.state,
+      playerCount: room.teams.red.players.length + room.teams.blue.players.length,
+      redPlayers: room.teams.red.players.length,
+      bluePlayers: room.teams.blue.players.length,
+      roundNumber: room.roundNumber
+    });
+  });
+  res.json({ rooms: roomList });
+});
+
 // Socket.io connection handling
 io.on('connection', (socket) => {
   console.log('User connected:', socket.id);

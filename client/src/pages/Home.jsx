@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { socket } from '../socket';
-import { Users, Play, Link } from 'lucide-react';
+import { Users, Play, Link, List } from 'lucide-react';
 
 export default function Home() {
   const [name, setName] = useState('');
@@ -91,6 +91,14 @@ export default function Home() {
             Войти
           </button>
         </div>
+
+        <button
+          onClick={() => navigate('/lobbies')}
+          className="w-full mb-4 py-2 rounded-xl font-semibold bg-white/10 text-white/70 hover:bg-white/20 transition-all flex items-center justify-center gap-2"
+        >
+          <List className="w-4 h-4" />
+          Список комнат
+        </button>
 
         <div className="space-y-4">
           <div>
