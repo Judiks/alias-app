@@ -73,7 +73,7 @@ io.on('connection', (socket) => {
   // Create room
   socket.on('create-room', async ({ name }) => {
     const room = createRoom(socket.id, name);
-    room.words = await getWords(500);
+    room.words = await getWords(1000); // Load more words to avoid repetition
     rooms.set(room.id, room);
     
     room.teams.red.players.push({ id: socket.id, name, isHost: true });
@@ -300,9 +300,13 @@ io.on('connection', (socket) => {
 
 // Helper functions
 function getNextWord(room) {
+  // If we run out of words, reload from the full list (shouldn't happen often)
   if (room.words.length === 0) {
+    console.log('Words exhausted, reloading...');
     room.words = Array.from(room.usedWords);
     room.usedWords.clear();
+    // Shuffle
+    room.words.sort(() => Math.random() - 0.5);
   }
   
   const word = room.words.pop();
