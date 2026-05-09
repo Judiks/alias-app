@@ -163,33 +163,44 @@ io.on('connection', (socket) => {
   socket.on('word-correct', () => {
     if (!currentRoom) return;
     const room = rooms.get(currentRoom);
-    if (!room || room.state !== 'playing') return;
+    if (!room || (room.state !== 'playing' && room.state !== 'last-word')) return;
     if (socket.id !== room.currentRound.explainer) return;
-    if (room.currentRound.timeLeft <= 0) return; // Can't guess after time is up
 
     room.teams[room.currentRound.team].score++;
     room.currentRound.wordsGuessed++;
-    room.currentRound.word = getNextWord(room);
 
+    // Check win condition
+    if (room.teams[room.currentRound.team].score >= room.settings.wordsToWin) {
+      endGame(room);
+      return;
+    }
+
+    // If it was last word, go to next turn
+    if (room.state === 'last-word') {
+      nextTurn(room);
+      return;
+    }
+
+    room.currentRound.word = getNextWord(room);
     io.to(room.id).emit('word-result', { 
       correct: true, 
       room,
       newWord: room.currentRound.word 
     });
-
-    // Check win condition
-    if (room.teams[room.currentRound.team].score >= room.settings.wordsToWin) {
-      endGame(room);
-    }
   });
 
-  // Skip word
+  // Skip word / Not guessed (for last word)
   socket.on('word-skip', () => {
     if (!currentRoom) return;
     const room = rooms.get(currentRoom);
-    if (!room || room.state !== 'playing') return;
+    if (!room || (room.state !== 'playing' && room.state !== 'last-word')) return;
     if (socket.id !== room.currentRound.explainer) return;
-    if (room.currentRound.timeLeft <= 0) return; // Can't skip after time is up
+
+    // If it was last word, just go to next turn (no penalty for not guessing last word)
+    if (room.state === 'last-word') {
+      nextTurn(room);
+      return;
+    }
 
     if (room.settings.skipPenalty) {
       room.teams[room.currentRound.team].score = Math.max(0, room.teams[room.currentRound.team].score - 1);
@@ -302,7 +313,9 @@ function startRoundTimer(room) {
 
     if (room.currentRound.timeLeft <= 0) {
       clearInterval(interval);
-      nextTurn(room);
+      // Wait for last word decision
+      room.state = 'last-word';
+      io.to(room.id).emit('last-word', { room });
     }
   }, 1000);
 }

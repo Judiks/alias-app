@@ -18,6 +18,7 @@ export default function Game() {
   const [winner, setWinner] = useState(null);
   const [isBreak, setIsBreak] = useState(false);
   const [breakInfo, setBreakInfo] = useState(null);
+  const [isLastWord, setIsLastWord] = useState(false);
   
   // Compute these from room state directly
   const isExplainer = room?.currentRound?.explainer === socket.id;
@@ -59,6 +60,7 @@ export default function Game() {
       setRoom(newRoom);
       setIsBreak(false);
       setBreakInfo(null);
+      setIsLastWord(false);
       if (newRoom.currentRound?.explainer === socket.id) {
         setCurrentWord(newRoom.currentRound.word);
       } else {
@@ -80,6 +82,11 @@ export default function Game() {
 
     socket.on('break-tick', ({ timeLeft: newTime }) => {
       setTimeLeft(newTime);
+    });
+
+    socket.on('last-word', ({ room: newRoom }) => {
+      setRoom(newRoom);
+      setIsLastWord(true);
     });
 
     socket.on('word-result', ({ correct, room: updatedRoom, newWord }) => {
@@ -125,6 +132,7 @@ export default function Game() {
       socket.off('timer-tick');
       socket.off('break-started');
       socket.off('break-tick');
+      socket.off('last-word');
       socket.off('word-result');
       socket.off('game-ended');
       socket.off('game-restarted');
@@ -280,12 +288,24 @@ export default function Game() {
       {/* Timer */}
       <div className="flex justify-center mb-6">
         <div className={`flex items-center gap-2 px-6 py-3 rounded-2xl ${
+          isLastWord ? 'bg-yellow-500/40 animate-pulse' :
           timeLeft <= 10 ? 'bg-red-500/40 animate-pulse' : 'bg-white/10'
         }`}>
           <Clock className="w-6 h-6" />
-          <span className="text-4xl font-mono font-bold">{timeLeft}</span>
+          <span className="text-4xl font-mono font-bold">
+            {isLastWord ? '⏱️' : timeLeft}
+          </span>
         </div>
       </div>
+      
+      {/* Last word indicator */}
+      {isLastWord && (
+        <div className="text-center mb-4">
+          <span className="bg-yellow-500/30 text-yellow-300 px-4 py-2 rounded-full text-lg font-bold">
+            ⚡ Последнее слово!
+          </span>
+        </div>
+      )}
 
       {/* Current Turn Info */}
       <div className="text-center mb-6">
@@ -308,7 +328,9 @@ export default function Game() {
             {/* Explainer view - shows word and buttons */}
             {isExplainer && (
               <>
-                <div className="text-sm text-indigo-300 mb-2">Объясните это слово:</div>
+                <div className="text-sm text-indigo-300 mb-2">
+                  {isLastWord ? '⚡ Последнее слово:' : 'Объясните это слово:'}
+                </div>
                 <div className="text-5xl md:text-6xl font-bold mb-8 text-shadow break-words">
                   {currentWord || room.currentRound?.word || '...'}
                 </div>
@@ -318,7 +340,7 @@ export default function Game() {
                     className="flex-1 py-4 bg-gradient-to-r from-orange-500 to-red-500 rounded-2xl font-bold text-xl hover:from-orange-600 hover:to-red-600 transition-all transform hover:scale-105 active:scale-95"
                   >
                     <X className="inline-block w-6 h-6 mr-2" />
-                    Пропустить
+                    {isLastWord ? 'Не угадали' : 'Пропустить'}
                   </button>
                   <button
                     onClick={handleCorrect}
