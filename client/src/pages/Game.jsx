@@ -14,10 +14,14 @@ export default function Game() {
   const [room, setRoom] = useState(initialRoom);
   const [timeLeft, setTimeLeft] = useState(initialRoom?.currentRound?.timeLeft || 60);
   const [currentWord, setCurrentWord] = useState('');
-  const [isExplainer, setIsExplainer] = useState(false);
   const [gameEnded, setGameEnded] = useState(false);
   const [winner, setWinner] = useState(null);
-  const [myTeam, setMyTeam] = useState(null);
+  
+  // Compute these from room state directly
+  const isExplainer = room?.currentRound?.explainer === socket.id;
+  const inRed = room?.teams?.red?.players?.find(p => p.id === socket.id);
+  const inBlue = room?.teams?.blue?.players?.find(p => p.id === socket.id);
+  const myTeam = inRed ? 'red' : inBlue ? 'blue' : null;
 
   useEffect(() => {
     // If no room data and page was accessed directly, redirect to room
@@ -27,72 +31,76 @@ export default function Game() {
       }, 2000);
       return () => clearTimeout(timer);
     }
-    
-    if (initialRoom) {
-      updateGameState(initialRoom, true);
-    }
   }, [room, initialRoom, roomId, navigate]);
 
+  // Initialize word only once on mount
   useEffect(() => {
-    socket.on('game-started', ({ room }) => {
-      setRoom(room);
-      updateGameState(room, true);
+    if (initialRoom && initialRoom.currentRound?.explainer === socket.id) {
+      setCurrentWord(initialRoom.currentRound.word);
+    }
+  }, []);
+
+  useEffect(() => {
+    socket.on('game-started', ({ room: newRoom }) => {
+      setRoom(newRoom);
+      if (newRoom.currentRound?.explainer === socket.id) {
+        setCurrentWord(newRoom.currentRound.word);
+      }
+      setTimeLeft(newRoom.currentRound?.timeLeft || 60);
     });
 
-    socket.on('room-updated', ({ room }) => {
-      setRoom(room);
-      updateGameState(room, false);
+    socket.on('room-updated', ({ room: newRoom }) => {
+      setRoom(newRoom);
     });
 
-    socket.on('turn-changed', ({ room }) => {
-      setRoom(room);
-      // Update team membership
-      const inRed = room.teams.red.players.find(p => p.id === socket.id);
-      const inBlue = room.teams.blue.players.find(p => p.id === socket.id);
-      setMyTeam(inRed ? 'red' : inBlue ? 'blue' : null);
-      // Force update explainer status
-      setIsExplainer(room.currentRound?.explainer === socket.id);
-      if (room.currentRound?.explainer === socket.id) {
-        setCurrentWord(room.currentRound.word);
+    socket.on('turn-changed', ({ room: newRoom }) => {
+      setRoom(newRoom);
+      if (newRoom.currentRound?.explainer === socket.id) {
+        setCurrentWord(newRoom.currentRound.word);
       } else {
         setCurrentWord('');
       }
-      setTimeLeft(room.currentRound?.timeLeft || 60);
+      setTimeLeft(newRoom.currentRound?.timeLeft || 60);
     });
 
-    socket.on('timer-tick', ({ timeLeft }) => {
-      setTimeLeft(timeLeft);
+    socket.on('timer-tick', ({ timeLeft: newTime }) => {
+      setTimeLeft(newTime);
     });
 
     socket.on('word-result', ({ correct, room: updatedRoom, newWord }) => {
-      // Update room but preserve current timeLeft (don't reset timer)
+      // Update room but DON'T let it affect timeLeft display
       setRoom(prev => ({
         ...updatedRoom,
         currentRound: {
           ...updatedRoom.currentRound,
-          timeLeft: prev?.currentRound?.timeLeft || updatedRoom.currentRound.timeLeft
+          // Keep the current timeLeft from previous state
+          timeLeft: prev?.currentRound?.timeLeft
         }
       }));
-      if (updatedRoom.currentRound.explainer === socket.id) {
+      // Only update word for explainer
+      if (updatedRoom.currentRound.explainer === socket.id && newWord) {
         setCurrentWord(newWord);
       }
     });
 
-    socket.on('game-ended', ({ room, winner }) => {
-      setRoom(room);
+    socket.on('game-ended', ({ room: newRoom, winner: gameWinner }) => {
+      setRoom(newRoom);
       setGameEnded(true);
-      setWinner(winner);
+      setWinner(gameWinner);
     });
 
-    socket.on('game-restarted', ({ room }) => {
-      setRoom(room);
+    socket.on('game-restarted', ({ room: newRoom }) => {
+      setRoom(newRoom);
       setGameEnded(false);
       setWinner(null);
-      updateGameState(room, true);
+      if (newRoom.currentRound?.explainer === socket.id) {
+        setCurrentWord(newRoom.currentRound.word);
+      }
+      setTimeLeft(newRoom.currentRound?.timeLeft || 60);
     });
 
-    socket.on('back-to-lobby', ({ room }) => {
-      navigate(`/room/${room.id}`);
+    socket.on('back-to-lobby', ({ room: newRoom }) => {
+      navigate(`/room/${newRoom.id}`);
     });
 
     return () => {
@@ -106,27 +114,6 @@ export default function Game() {
       socket.off('back-to-lobby');
     };
   }, [navigate]);
-
-  const updateGameState = (room, updateTimer = false) => {
-    if (!room) return;
-    
-    const inRed = room.teams.red.players.find(p => p.id === socket.id);
-    const inBlue = room.teams.blue.players.find(p => p.id === socket.id);
-    setMyTeam(inRed ? 'red' : inBlue ? 'blue' : null);
-    
-    setIsExplainer(room.currentRound?.explainer === socket.id);
-    
-    // Only update timer on turn change or game start
-    if (updateTimer) {
-      setTimeLeft(room.currentRound?.timeLeft || 60);
-    }
-    
-    if (room.currentRound?.explainer === socket.id) {
-      setCurrentWord(room.currentRound.word);
-    } else {
-      setCurrentWord('');
-    }
-  };
 
   const handleCorrect = () => {
     socket.emit('word-correct');
