@@ -21,9 +21,10 @@ app.use(express.json());
 const rooms = new Map();
 
 // Room structure
-function createRoom(hostId, hostName) {
+function createRoom(hostId, hostName, roomName) {
   return {
     id: uuidv4().slice(0, 6).toUpperCase(),
+    name: roomName || 'Моя комната',
     host: hostId,
     teams: {
       red: { players: [], score: 0, currentExplainerIndex: 0 },
@@ -92,6 +93,7 @@ io.on('connection', (socket) => {
     rooms.forEach((room) => {
       roomList.push({
         id: room.id,
+        name: room.name,
         state: room.state,
         playerCount: room.teams.red.players.length + room.teams.blue.players.length,
         redPlayers: room.teams.red.players.length,
@@ -103,18 +105,18 @@ io.on('connection', (socket) => {
   });
 
   // Create room
-  socket.on('create-room', async ({ name }) => {
-    const room = createRoom(socket.id, name);
+  socket.on('create-room', async ({ name, roomName }) => {
+    const room = createRoom(socket.id, name, roomName);
     room.words = await getWords(2000); // Load many words, shuffled to mix all difficulty levels
     rooms.set(room.id, room);
-    
+
     room.teams.red.players.push({ id: socket.id, name, isHost: true });
     currentRoom = room.id;
     playerName = name;
-    
+
     socket.join(room.id);
     socket.emit('room-created', { roomId: room.id, room });
-    console.log(`Room ${room.id} created by ${name}`);
+    console.log(`Room ${room.id} (${room.name}) created by ${name}`);
   });
 
   // Join room

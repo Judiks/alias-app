@@ -6,6 +6,7 @@ import { Users, Play, Link, List } from 'lucide-react';
 export default function Home() {
   const [name, setName] = useState('');
   const [joinCode, setJoinCode] = useState('');
+  const [roomName, setRoomName] = useState('');
   const [mode, setMode] = useState('create'); // create or join
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -19,7 +20,7 @@ export default function Home() {
     setLoading(true);
     setError('');
 
-    socket.emit('create-room', { name: name.trim() });
+    socket.emit('create-room', { name: name.trim(), roomName: roomName.trim() || 'Моя комната' });
 
     socket.once('room-created', ({ roomId, room }) => {
       setLoading(false);
@@ -112,6 +113,20 @@ export default function Home() {
               maxLength={20}
             />
           </div>
+
+          {mode === 'create' && (
+            <div>
+              <label className="block text-sm text-indigo-200 mb-2">Название комнаты (опционально)</label>
+              <input
+                type="text"
+                value={roomName}
+                onChange={(e) => setRoomName(e.target.value)}
+                placeholder="Название комнаты..."
+                className="w-full px-4 py-3 rounded-xl bg-white/10 border border-white/20 text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                maxLength={30}
+              />
+            </div>
+          )}
 
           {mode === 'join' && (
             <div>

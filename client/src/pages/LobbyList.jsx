@@ -102,7 +102,10 @@ export default function LobbyList() {
                 <div className="flex items-center justify-between">
                   <div className="flex-1">
                     <div className="flex items-center gap-3 mb-2">
-                      <span className="text-2xl font-bold text-white">{room.id}</span>
+                      <div>
+                        <span className="text-2xl font-bold text-white">{room.name || room.id}</span>
+                        <span className="text-sm text-white/50 ml-2">{room.id}</span>
+                      </div>
                       <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStateColor(room.state)}`}>
                         {getStateLabel(room.state)}
                       </span>

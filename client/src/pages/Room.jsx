@@ -188,11 +188,13 @@ export default function Room() {
       <div className="max-w-4xl mx-auto">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
-          <h1 className="text-3xl font-bold text-white">Комната</h1>
-          <div className="flex items-center gap-2">
-            <div className="bg-white/10 backdrop-blur px-4 py-2 rounded-xl font-mono text-2xl tracking-widest">
+          <div>
+            <h1 className="text-3xl font-bold text-white">{room.name || 'Комната'}</h1>
+            <div className="bg-white/10 backdrop-blur px-3 py-1 rounded-lg font-mono text-lg tracking-widest mt-1 inline-block">
               {roomId}
             </div>
+          </div>
+          <div className="flex items-center gap-2">
             <button
               onClick={copyLink}
               className="p-3 bg-white/10 hover:bg-white/20 rounded-xl transition-all"
