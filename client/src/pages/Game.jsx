@@ -16,6 +16,8 @@ export default function Game() {
   const [currentWord, setCurrentWord] = useState('');
   const [gameEnded, setGameEnded] = useState(false);
   const [winner, setWinner] = useState(null);
+  const [isBreak, setIsBreak] = useState(false);
+  const [breakInfo, setBreakInfo] = useState(null);
   
   // Compute these from room state directly
   const isExplainer = room?.currentRound?.explainer === socket.id;
@@ -55,6 +57,8 @@ export default function Game() {
 
     socket.on('turn-changed', ({ room: newRoom }) => {
       setRoom(newRoom);
+      setIsBreak(false);
+      setBreakInfo(null);
       if (newRoom.currentRound?.explainer === socket.id) {
         setCurrentWord(newRoom.currentRound.word);
       } else {
@@ -64,6 +68,17 @@ export default function Game() {
     });
 
     socket.on('timer-tick', ({ timeLeft: newTime }) => {
+      setTimeLeft(newTime);
+    });
+
+    socket.on('break-started', ({ room: newRoom, nextTeam, explainerName }) => {
+      setRoom(newRoom);
+      setIsBreak(true);
+      setBreakInfo({ nextTeam, explainerName });
+      setTimeLeft(10);
+    });
+
+    socket.on('break-tick', ({ timeLeft: newTime }) => {
       setTimeLeft(newTime);
     });
 
@@ -108,6 +123,8 @@ export default function Game() {
       socket.off('room-updated');
       socket.off('turn-changed');
       socket.off('timer-tick');
+      socket.off('break-started');
+      socket.off('break-tick');
       socket.off('word-result');
       socket.off('game-ended');
       socket.off('game-restarted');
@@ -142,6 +159,47 @@ export default function Game() {
   const handleBackToLobby = () => {
     socket.emit('back-to-lobby');
   };
+
+  // Break screen between turns
+  if (isBreak && breakInfo) {
+    const nextTeamName = breakInfo.nextTeam === 'red' ? 'Красные' : 'Синие';
+    const nextTeamColor = breakInfo.nextTeam === 'red' ? 'red' : 'blue';
+    
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4">
+        <div className="bg-white/10 backdrop-blur-lg rounded-3xl p-8 text-center max-w-md w-full">
+          <div className="text-6xl mb-4">⏸️</div>
+          <h1 className="text-3xl font-bold mb-4">Перерыв</h1>
+          
+          <div className={`inline-block px-4 py-2 rounded-full mb-4 ${
+            nextTeamColor === 'red' ? 'bg-red-500/30 text-red-300' : 'bg-blue-500/30 text-blue-300'
+          }`}>
+            Следующий ход: <strong>{nextTeamName}</strong>
+          </div>
+          
+          <div className="text-indigo-300 mb-6">
+            Объясняет: <strong>{breakInfo.explainerName}</strong>
+          </div>
+          
+          <div className="text-6xl font-mono font-bold mb-4">{timeLeft}</div>
+          <div className="text-indigo-400">Приготовьтесь!</div>
+          
+          {/* Current scores */}
+          <div className="flex justify-center gap-8 mt-6">
+            <div className="text-center">
+              <div className="text-red-400 text-sm">Красные</div>
+              <div className="text-2xl font-bold text-red-300">{room?.teams?.red?.score || 0}</div>
+            </div>
+            <div className="text-xl text-white/50">:</div>
+            <div className="text-center">
+              <div className="text-blue-400 text-sm">Синие</div>
+              <div className="text-2xl font-bold text-blue-300">{room?.teams?.blue?.score || 0}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (gameEnded) {
     return (

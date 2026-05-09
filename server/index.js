@@ -332,9 +332,37 @@ function nextTurn(room) {
     return;
   }
 
+  // Set break state
+  room.state = 'break';
   room.currentRound = {
     team: nextTeam,
     explainer: nextExplainer.id,
+    word: null,
+    timeLeft: 10, // 10 second break
+    wordsGuessed: 0,
+    wordsSkipped: 0
+  };
+
+  io.to(room.id).emit('break-started', { room, nextTeam, explainerName: nextExplainer.name });
+  
+  // Start break countdown
+  let breakTime = 10;
+  const breakInterval = setInterval(() => {
+    breakTime--;
+    io.to(room.id).emit('break-tick', { timeLeft: breakTime });
+    
+    if (breakTime <= 0) {
+      clearInterval(breakInterval);
+      startActualTurn(room, nextTeam, nextExplainer);
+    }
+  }, 1000);
+}
+
+function startActualTurn(room, team, explainer) {
+  room.state = 'playing';
+  room.currentRound = {
+    team: team,
+    explainer: explainer.id,
     word: getNextWord(room),
     timeLeft: room.settings.roundTime,
     wordsGuessed: 0,
