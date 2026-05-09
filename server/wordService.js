@@ -34,7 +34,7 @@ export async function getWords(count = 500) {
     wordCache = loadWordsFromFile();
   }
 
-  // Return shuffled subset
+  // Shuffle ALL words to mix difficulty levels, then return subset
   const shuffled = [...wordCache].sort(() => Math.random() - 0.5);
   return shuffled.slice(0, Math.min(count, shuffled.length));
 }

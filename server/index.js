@@ -73,7 +73,7 @@ io.on('connection', (socket) => {
   // Create room
   socket.on('create-room', async ({ name }) => {
     const room = createRoom(socket.id, name);
-    room.words = await getWords(1000); // Load more words to avoid repetition
+    room.words = await getWords(2000); // Load many words, shuffled to mix all difficulty levels
     rooms.set(room.id, room);
     
     room.teams.red.players.push({ id: socket.id, name, isHost: true });
