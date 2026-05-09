@@ -34,7 +34,7 @@ function createRoom(hostId, hostName) {
       wordsToWin: 50,
       skipPenalty: true
     },
-    state: 'lobby', // lobby, playing, paused, finished
+    state: 'lobby', // lobby, playing, break, last-word, finished
     roundNumber: 0,
     currentRound: {
       team: 'red',
@@ -44,6 +44,9 @@ function createRoom(hostId, hostName) {
       wordsGuessed: 0,
       wordsSkipped: 0
     },
+    goalReached: false, // true when any team reaches wordsToWin
+    redPlayedFinal: false, // red team played their final turn
+    bluePlayedFinal: false, // blue team played their final turn
     words: [],
     usedWords: new Set(),
     createdAt: Date.now()
@@ -169,10 +172,13 @@ io.on('connection', (socket) => {
     room.teams[room.currentRound.team].score++;
     room.currentRound.wordsGuessed++;
 
-    // Check win condition
+    // Mark if goal is reached (but don't end game yet)
     if (room.teams[room.currentRound.team].score >= room.settings.wordsToWin) {
-      endGame(room);
-      return;
+      room.goalReached = true;
+      io.to(room.id).emit('goal-reached', { 
+        team: room.currentRound.team, 
+        score: room.teams[room.currentRound.team].score 
+      });
     }
 
     // If it was last word, go to next turn
@@ -229,6 +235,9 @@ io.on('connection', (socket) => {
     room.teams.blue.currentExplainerIndex = 0;
     room.roundNumber = 1;
     room.state = 'playing';
+    room.goalReached = false;
+    room.redPlayedFinal = false;
+    room.bluePlayedFinal = false;
     room.usedWords.clear();
     room.words = await getWords(500);
 
@@ -313,9 +322,29 @@ function startRoundTimer(room) {
 
     if (room.currentRound.timeLeft <= 0) {
       clearInterval(interval);
-      // Wait for last word decision
+      // Last word - 30 seconds to decide
       room.state = 'last-word';
+      room.currentRound.timeLeft = 30;
       io.to(room.id).emit('last-word', { room });
+      startLastWordTimer(room);
+    }
+  }, 1000);
+}
+
+function startLastWordTimer(room) {
+  const interval = setInterval(() => {
+    if (!rooms.has(room.id) || room.state !== 'last-word') {
+      clearInterval(interval);
+      return;
+    }
+
+    room.currentRound.timeLeft--;
+    io.to(room.id).emit('last-word-tick', { timeLeft: room.currentRound.timeLeft });
+
+    if (room.currentRound.timeLeft <= 0) {
+      clearInterval(interval);
+      // Time's up for last word - count as not guessed
+      nextTurn(room);
     }
   }, 1000);
 }
@@ -323,6 +352,29 @@ function startRoundTimer(room) {
 function nextTurn(room) {
   const currentTeam = room.currentRound.team;
   const nextTeam = currentTeam === 'red' ? 'blue' : 'red';
+  
+  // Check win conditions:
+  // Red always plays first in a round, then blue
+  // If RED reaches goal on their turn -> blue gets final chance
+  // If BLUE reaches goal on their turn -> game ends immediately (red already played)
+  
+  if (room.goalReached) {
+    if (currentTeam === 'red') {
+      // Red just finished, mark it and give blue final chance
+      room.redPlayedFinal = true;
+    } else {
+      // Blue just finished their turn
+      if (room.redPlayedFinal) {
+        // Red reached goal, blue had their final chance - game over
+        endGame(room);
+        return;
+      } else {
+        // Blue reached goal first on their turn - red already played this round, game over
+        endGame(room);
+        return;
+      }
+    }
+  }
   
   // Increment round number when switching back to red
   if (nextTeam === 'red') {
@@ -356,7 +408,15 @@ function nextTurn(room) {
     wordsSkipped: 0
   };
 
-  io.to(room.id).emit('break-started', { room, nextTeam, explainerName: nextExplainer.name });
+  // Notify if this is the final chance for the other team
+  const isFinalChance = room.goalReached && !room[`${nextTeam}PlayedFinal`];
+  
+  io.to(room.id).emit('break-started', { 
+    room, 
+    nextTeam, 
+    explainerName: nextExplainer.name,
+    isFinalChance 
+  });
   
   // Start break countdown
   let breakTime = 10;

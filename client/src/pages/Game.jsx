@@ -73,11 +73,16 @@ export default function Game() {
       setTimeLeft(newTime);
     });
 
-    socket.on('break-started', ({ room: newRoom, nextTeam, explainerName }) => {
+    socket.on('break-started', ({ room: newRoom, nextTeam, explainerName, isFinalChance }) => {
       setRoom(newRoom);
       setIsBreak(true);
-      setBreakInfo({ nextTeam, explainerName });
+      setBreakInfo({ nextTeam, explainerName, isFinalChance });
       setTimeLeft(10);
+    });
+
+    socket.on('goal-reached', ({ team, score }) => {
+      // Could show a notification here
+      console.log(`${team} reached goal with ${score} points!`);
     });
 
     socket.on('break-tick', ({ timeLeft: newTime }) => {
@@ -87,6 +92,11 @@ export default function Game() {
     socket.on('last-word', ({ room: newRoom }) => {
       setRoom(newRoom);
       setIsLastWord(true);
+      setTimeLeft(30);
+    });
+
+    socket.on('last-word-tick', ({ timeLeft: newTime }) => {
+      setTimeLeft(newTime);
     });
 
     socket.on('word-result', ({ correct, room: updatedRoom, newWord }) => {
@@ -131,8 +141,10 @@ export default function Game() {
       socket.off('turn-changed');
       socket.off('timer-tick');
       socket.off('break-started');
+      socket.off('goal-reached');
       socket.off('break-tick');
       socket.off('last-word');
+      socket.off('last-word-tick');
       socket.off('word-result');
       socket.off('game-ended');
       socket.off('game-restarted');
@@ -172,12 +184,26 @@ export default function Game() {
   if (isBreak && breakInfo) {
     const nextTeamName = breakInfo.nextTeam === 'red' ? 'Красные' : 'Синие';
     const nextTeamColor = breakInfo.nextTeam === 'red' ? 'red' : 'blue';
+    const enemyTeam = breakInfo.nextTeam === 'red' ? 'blue' : 'red';
+    const enemyScore = room?.teams?.[enemyTeam]?.score || 0;
     
     return (
       <div className="min-h-screen flex items-center justify-center p-4">
         <div className="bg-white/10 backdrop-blur-lg rounded-3xl p-8 text-center max-w-md w-full">
-          <div className="text-6xl mb-4">⏸️</div>
-          <h1 className="text-3xl font-bold mb-4">Перерыв</h1>
+          {breakInfo.isFinalChance ? (
+            <>
+              <div className="text-6xl mb-4">🔥</div>
+              <h1 className="text-3xl font-bold mb-2 text-yellow-400">Финальный шанс!</h1>
+              <p className="text-indigo-300 mb-4">
+                Соперники набрали {enemyScore} очков. Догоните их!
+              </p>
+            </>
+          ) : (
+            <>
+              <div className="text-6xl mb-4">⏸️</div>
+              <h1 className="text-3xl font-bold mb-4">Перерыв</h1>
+            </>
+          )}
           
           <div className={`inline-block px-4 py-2 rounded-full mb-4 ${
             nextTeamColor === 'red' ? 'bg-red-500/30 text-red-300' : 'bg-blue-500/30 text-blue-300'
@@ -292,9 +318,7 @@ export default function Game() {
           timeLeft <= 10 ? 'bg-red-500/40 animate-pulse' : 'bg-white/10'
         }`}>
           <Clock className="w-6 h-6" />
-          <span className="text-4xl font-mono font-bold">
-            {isLastWord ? '⏱️' : timeLeft}
-          </span>
+          <span className="text-4xl font-mono font-bold">{timeLeft}</span>
         </div>
       </div>
       
