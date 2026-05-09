@@ -64,9 +64,16 @@ export default function Game() {
       setTimeLeft(timeLeft);
     });
 
-    socket.on('word-result', ({ correct, room, newWord }) => {
-      setRoom(room);
-      if (room.currentRound.explainer === socket.id) {
+    socket.on('word-result', ({ correct, room: updatedRoom, newWord }) => {
+      // Update room but preserve current timeLeft (don't reset timer)
+      setRoom(prev => ({
+        ...updatedRoom,
+        currentRound: {
+          ...updatedRoom.currentRound,
+          timeLeft: prev?.currentRound?.timeLeft || updatedRoom.currentRound.timeLeft
+        }
+      }));
+      if (updatedRoom.currentRound.explainer === socket.id) {
         setCurrentWord(newWord);
       }
     });
