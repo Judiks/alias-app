@@ -1,15 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { socket } from '../socket';
-import { Users, Play, RefreshCw, ArrowLeft } from 'lucide-react';
+import { Users, RefreshCw, ArrowLeft } from 'lucide-react';
 
 export default function LobbyList() {
   const navigate = useNavigate();
   const [rooms, setRooms] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [joinRoomId, setJoinRoomId] = useState('');
-  const [joinName, setJoinName] = useState('');
-  const [showJoinForm, setShowJoinForm] = useState(false);
 
   const fetchRooms = () => {
     setLoading(true);
@@ -42,22 +39,15 @@ export default function LobbyList() {
     };
   }, []);
 
-  const handleJoinRoom = (roomId) => {
-    if (!joinName.trim()) {
-      alert('Введите имя');
-      return;
-    }
-    localStorage.setItem('alias_player_name', joinName.trim());
-    navigate(`/room/${roomId}`, { state: { team: null, isCreator: false } });
-  };
-
   const handleQuickJoin = (roomId) => {
     const savedName = localStorage.getItem('alias_player_name');
-    if (savedName) {
-      setJoinName(savedName);
+    if (!savedName) {
+      // No name saved, redirect to home to enter name first
+      navigate('/');
+      return;
     }
-    setJoinRoomId(roomId);
-    setShowJoinForm(true);
+    // Join directly without asking for name again
+    navigate(`/room/${roomId}`, { state: { team: null, isCreator: false } });
   };
 
   const getStateLabel = (state) => {
@@ -140,45 +130,11 @@ export default function LobbyList() {
                     onClick={() => handleQuickJoin(room.id)}
                     className="ml-4 px-4 py-2 bg-gradient-to-r from-indigo-500 to-purple-500 rounded-xl font-bold text-white hover:from-indigo-600 hover:to-purple-600 transition-all transform hover:scale-105"
                   >
-                    <Play className="inline-block w-4 h-4 mr-1" />
                     Войти
                   </button>
                 </div>
               </div>
             ))}
-          </div>
-        )}
-
-        {/* Join Form Modal */}
-        {showJoinForm && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-            <div className="bg-gradient-to-br from-indigo-900 to-purple-900 rounded-3xl p-8 max-w-md w-full">
-              <h2 className="text-2xl font-bold text-white mb-4">
-                Войти в комнату {joinRoomId}
-              </h2>
-              <input
-                type="text"
-                placeholder="Ваше имя"
-                value={joinName}
-                onChange={(e) => setJoinName(e.target.value)}
-                className="w-full px-4 py-3 rounded-xl bg-white/10 text-white placeholder-white/50 border-2 border-white/20 focus:border-white/50 outline-none mb-4"
-                onKeyPress={(e) => e.key === 'Enter' && handleJoinRoom(joinRoomId)}
-              />
-              <div className="flex gap-3">
-                <button
-                  onClick={() => setShowJoinForm(false)}
-                  className="flex-1 px-4 py-3 bg-white/10 rounded-xl text-white hover:bg-white/20 transition-colors"
-                >
-                  Отмена
-                </button>
-                <button
-                  onClick={() => handleJoinRoom(joinRoomId)}
-                  className="flex-1 px-4 py-3 bg-gradient-to-r from-indigo-500 to-purple-500 rounded-xl text-white font-bold hover:from-indigo-600 hover:to-purple-600 transition-all"
-                >
-                  Войти
-                </button>
-              </div>
-            </div>
           </div>
         )}
       </div>
