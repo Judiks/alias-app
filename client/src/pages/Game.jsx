@@ -1,18 +1,37 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { socket } from '../socket';
 import { Check, X, Clock, Trophy, RotateCcw } from 'lucide-react';
 
 export default function Game() {
   const { roomId } = useParams();
   const navigate = useNavigate();
-  const [room, setRoom] = useState(null);
-  const [timeLeft, setTimeLeft] = useState(60);
+  const location = useLocation();
+  
+  // Get initial room from navigation state
+  const initialRoom = location.state?.room || null;
+  
+  const [room, setRoom] = useState(initialRoom);
+  const [timeLeft, setTimeLeft] = useState(initialRoom?.currentRound?.timeLeft || 60);
   const [currentWord, setCurrentWord] = useState('');
   const [isExplainer, setIsExplainer] = useState(false);
   const [gameEnded, setGameEnded] = useState(false);
   const [winner, setWinner] = useState(null);
   const [myTeam, setMyTeam] = useState(null);
+
+  useEffect(() => {
+    // If no room data and page was accessed directly, redirect to room
+    if (!room && !initialRoom) {
+      const timer = setTimeout(() => {
+        navigate(`/room/${roomId}`);
+      }, 2000);
+      return () => clearTimeout(timer);
+    }
+    
+    if (initialRoom) {
+      updateGameState(initialRoom);
+    }
+  }, [room, initialRoom, roomId, navigate]);
 
   useEffect(() => {
     socket.on('game-started', ({ room }) => {
@@ -47,6 +66,17 @@ export default function Game() {
       setWinner(winner);
     });
 
+    socket.on('game-restarted', ({ room }) => {
+      setRoom(room);
+      setGameEnded(false);
+      setWinner(null);
+      updateGameState(room);
+    });
+
+    socket.on('back-to-lobby', ({ room }) => {
+      navigate(`/room/${room.id}`);
+    });
+
     return () => {
       socket.off('game-started');
       socket.off('room-updated');
@@ -54,8 +84,10 @@ export default function Game() {
       socket.off('timer-tick');
       socket.off('word-result');
       socket.off('game-ended');
+      socket.off('game-restarted');
+      socket.off('back-to-lobby');
     };
-  }, []);
+  }, [navigate]);
 
   const updateGameState = (room) => {
     if (!room) return;
@@ -82,10 +114,6 @@ export default function Game() {
     socket.emit('word-skip');
   };
 
-  const backToLobby = () => {
-    navigate('/');
-  };
-
   if (!room) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -93,6 +121,18 @@ export default function Game() {
       </div>
     );
   }
+
+  const isHost = room.host === socket.id;
+
+  const handleRestart = () => {
+    socket.emit('restart-game');
+    setGameEnded(false);
+    setWinner(null);
+  };
+
+  const handleBackToLobby = () => {
+    socket.emit('back-to-lobby');
+  };
 
   if (gameEnded) {
     return (
@@ -104,6 +144,7 @@ export default function Game() {
           <h1 className="text-4xl font-bold mb-4">
             {winner === 'tie' ? 'Ничья!' : winner === 'red' ? 'Красные победили!' : 'Синие победили!'}
           </h1>
+          <div className="text-indigo-300 mb-2">Раунд: {room.roundNumber || 1}</div>
           <div className="flex justify-center gap-8 mb-8">
             <div className="text-center">
               <div className="text-red-400 text-sm">Красные</div>
@@ -115,13 +156,27 @@ export default function Game() {
               <div className="text-4xl font-bold text-blue-300">{room.teams.blue.score}</div>
             </div>
           </div>
-          <button
-            onClick={backToLobby}
-            className="w-full py-4 bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl font-bold text-lg hover:from-purple-600 hover:to-pink-600 transition-all"
-          >
-            <RotateCcw className="inline-block w-5 h-5 mr-2" />
-            Новая игра
-          </button>
+          {isHost ? (
+            <div className="space-y-3">
+              <button
+                onClick={handleRestart}
+                className="w-full py-4 bg-gradient-to-r from-green-400 to-emerald-500 rounded-xl font-bold text-lg hover:from-green-500 hover:to-emerald-600 transition-all"
+              >
+                <RotateCcw className="inline-block w-5 h-5 mr-2" />
+                Играть снова
+              </button>
+              <button
+                onClick={handleBackToLobby}
+                className="w-full py-3 bg-white/10 hover:bg-white/20 rounded-xl transition-all"
+              >
+                В лобби (сменить команды)
+              </button>
+            </div>
+          ) : (
+            <div className="text-indigo-300">
+              Ожидание хоста...
+            </div>
+          )}
         </div>
       </div>
     );
@@ -136,15 +191,22 @@ export default function Game() {
 
   return (
     <div className="min-h-screen p-4 flex flex-col">
+      {/* Round & Goal */}
+      <div className="text-center mb-2">
+        <span className="text-indigo-300 text-sm">
+          Раунд {room.roundNumber || 1} • Цель: {room.settings?.wordsToWin || 50} очков
+        </span>
+      </div>
+
       {/* Score Board */}
       <div className="flex justify-center gap-8 mb-4">
         <div className={`text-center px-6 py-2 rounded-xl ${room.currentRound?.team === 'red' ? 'bg-red-500/40 ring-2 ring-red-400' : 'bg-red-500/20'}`}>
           <div className="text-red-300 text-sm">Красные</div>
-          <div className="text-3xl font-bold">{room.teams.red.score}</div>
+          <div className="text-3xl font-bold">{room.teams.red.score}/{room.settings?.wordsToWin || 50}</div>
         </div>
         <div className={`text-center px-6 py-2 rounded-xl ${room.currentRound?.team === 'blue' ? 'bg-blue-500/40 ring-2 ring-blue-400' : 'bg-blue-500/20'}`}>
           <div className="text-blue-300 text-sm">Синие</div>
-          <div className="text-3xl font-bold">{room.teams.blue.score}</div>
+          <div className="text-3xl font-bold">{room.teams.blue.score}/{room.settings?.wordsToWin || 50}</div>
         </div>
       </div>
 

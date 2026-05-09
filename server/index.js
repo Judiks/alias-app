@@ -26,8 +26,8 @@ function createRoom(hostId, hostName) {
     id: uuidv4().slice(0, 6).toUpperCase(),
     host: hostId,
     teams: {
-      red: { players: [], score: 0 },
-      blue: { players: [], score: 0 }
+      red: { players: [], score: 0, currentExplainerIndex: 0 },
+      blue: { players: [], score: 0, currentExplainerIndex: 0 }
     },
     settings: {
       roundTime: 60,
@@ -35,6 +35,7 @@ function createRoom(hostId, hostName) {
       skipPenalty: true
     },
     state: 'lobby', // lobby, playing, paused, finished
+    roundNumber: 0,
     currentRound: {
       team: 'red',
       explainer: null,
@@ -201,6 +202,51 @@ io.on('connection', (socket) => {
     });
   });
 
+  // Restart game (new game with same players)
+  socket.on('restart-game', async () => {
+    if (!currentRoom) return;
+    const room = rooms.get(currentRoom);
+    if (!room) return;
+    if (socket.id !== room.host) return;
+
+    // Reset scores and state
+    room.teams.red.score = 0;
+    room.teams.blue.score = 0;
+    room.teams.red.currentExplainerIndex = 0;
+    room.teams.blue.currentExplainerIndex = 0;
+    room.roundNumber = 1;
+    room.state = 'playing';
+    room.usedWords.clear();
+    room.words = await getWords(500);
+
+    room.currentRound = {
+      team: 'red',
+      explainer: room.teams.red.players[0]?.id,
+      word: getNextWord(room),
+      timeLeft: room.settings.roundTime,
+      wordsGuessed: 0,
+      wordsSkipped: 0
+    };
+
+    io.to(room.id).emit('game-restarted', { room });
+    startRoundTimer(room);
+  });
+
+  // Back to lobby
+  socket.on('back-to-lobby', () => {
+    if (!currentRoom) return;
+    const room = rooms.get(currentRoom);
+    if (!room) return;
+    if (socket.id !== room.host) return;
+
+    room.state = 'lobby';
+    room.teams.red.score = 0;
+    room.teams.blue.score = 0;
+    room.roundNumber = 0;
+
+    io.to(room.id).emit('back-to-lobby', { room });
+  });
+
   // Disconnect
   socket.on('disconnect', () => {
     console.log('User disconnected:', socket.id);
@@ -263,12 +309,21 @@ function nextTurn(room) {
   const currentTeam = room.currentRound.team;
   const nextTeam = currentTeam === 'red' ? 'blue' : 'red';
   
-  // Find next explainer
-  const currentExplainerIndex = room.teams[nextTeam].players.findIndex(
-    p => p.id === room.currentRound.explainer
-  );
-  const nextExplainerIndex = (currentExplainerIndex + 1) % room.teams[nextTeam].players.length;
-  const nextExplainer = room.teams[nextTeam].players[nextExplainerIndex] || room.teams[nextTeam].players[0];
+  // Increment round number when switching back to red
+  if (nextTeam === 'red') {
+    room.roundNumber++;
+  }
+  
+  // Get next explainer from the team (rotate through players)
+  const teamData = room.teams[nextTeam];
+  if (teamData.players.length === 0) {
+    endGame(room);
+    return;
+  }
+  
+  // Move to next explainer in the team
+  teamData.currentExplainerIndex = (teamData.currentExplainerIndex + 1) % teamData.players.length;
+  const nextExplainer = teamData.players[teamData.currentExplainerIndex];
 
   if (!nextExplainer) {
     endGame(room);
@@ -296,11 +351,24 @@ function endGame(room) {
   io.to(room.id).emit('game-ended', { room, winner });
 }
 
+// Keep server alive (prevent Render sleep)
+function keepAlive() {
+  const url = process.env.RENDER_EXTERNAL_URL || `http://localhost:${process.env.PORT || 3001}`;
+  if (process.env.RENDER_EXTERNAL_URL) {
+    setInterval(() => {
+      fetch(`${url}/api/health`)
+        .then(() => console.log('Keep-alive ping sent'))
+        .catch(() => {});
+    }, 14 * 60 * 1000); // Every 14 minutes
+  }
+}
+
 // Start server
 const PORT = process.env.PORT || 3001;
 
 initWordCache().then(() => {
   server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
+    keepAlive();
   });
 });

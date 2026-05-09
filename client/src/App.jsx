@@ -29,8 +29,12 @@ function App() {
       </Routes>
       
       {!connected && (
-        <div className="fixed bottom-4 right-4 bg-yellow-500 text-black px-4 py-2 rounded-lg text-sm">
-          Подключение к серверу...
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
+          <div className="text-center">
+            <div className="animate-spin w-12 h-12 border-4 border-purple-500 border-t-transparent rounded-full mx-auto mb-4"></div>
+            <div className="text-xl">Подключение к серверу...</div>
+            <div className="text-sm text-indigo-300 mt-2">Сервер может просыпаться до 30 сек</div>
+          </div>
         </div>
       )}
     </div>
