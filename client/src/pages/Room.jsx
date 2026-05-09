@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { socket } from '../socket';
-import { Copy, Check, Settings, Play, Users, Crown } from 'lucide-react';
+import { Copy, Check, Settings, Play, Users, Crown, LogOut } from 'lucide-react';
 
 export default function Room() {
   const { roomId } = useParams();
@@ -129,6 +129,16 @@ export default function Room() {
     socket.emit('start-game');
   };
 
+  const leaveRoom = () => {
+    // Clear localStorage
+    localStorage.removeItem('alias_room_id');
+    localStorage.removeItem('alias_player_name');
+    // Leave socket room
+    socket.emit('leave-room');
+    // Navigate to home
+    navigate('/');
+  };
+
   if (!room) {
     // Show join form if user came directly via link
     if (needsJoin) {
@@ -198,6 +208,13 @@ export default function Room() {
                 <Settings className="w-5 h-5" />
               </button>
             )}
+            <button
+              onClick={leaveRoom}
+              className="p-3 bg-red-500/20 hover:bg-red-500/30 rounded-xl transition-all text-red-300"
+              title="Покинуть комнату"
+            >
+              <LogOut className="w-5 h-5" />
+            </button>
           </div>
         </div>
 

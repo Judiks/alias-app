@@ -301,6 +301,36 @@ io.on('connection', (socket) => {
     io.to(room.id).emit('back-to-lobby', { room });
   });
 
+  // Leave room
+  socket.on('leave-room', () => {
+    if (!currentRoom) return;
+    const room = rooms.get(currentRoom);
+    if (!room) return;
+
+    // Remove player from teams
+    ['red', 'blue'].forEach(team => {
+      room.teams[team].players = room.teams[team].players.filter(p => p.id !== socket.id);
+    });
+
+    // Leave socket room
+    socket.leave(room.id);
+
+    // If host left, assign new host or delete room
+    if (room.host === socket.id) {
+      const allPlayers = [...room.teams.red.players, ...room.teams.blue.players];
+      if (allPlayers.length > 0) {
+        room.host = allPlayers[0].id;
+        io.to(room.id).emit('room-updated', { room });
+      } else {
+        rooms.delete(room.id);
+      }
+    } else {
+      io.to(room.id).emit('room-updated', { room });
+    }
+
+    currentRoom = null;
+  });
+
   // Disconnect
   socket.on('disconnect', () => {
     console.log('User disconnected:', socket.id);
