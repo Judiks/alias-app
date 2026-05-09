@@ -71,7 +71,7 @@ export default function LobbyList() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-800 flex items-center justify-center p-4">
+    <div className="min-h-screen flex items-center justify-center p-4">
       <div className="bg-white/10 backdrop-blur-lg rounded-3xl p-8 max-w-2xl w-full">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-3xl font-bold text-white">Активные комнаты</h1>
