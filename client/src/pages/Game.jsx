@@ -132,7 +132,7 @@ export default function Game() {
     });
 
     socket.on('back-to-lobby', ({ room: newRoom }) => {
-      navigate(`/room/${newRoom.id}`);
+      navigate(`/room/${newRoom.id}`, { state: { room: newRoom, fromGame: true } });
     });
 
     return () => {

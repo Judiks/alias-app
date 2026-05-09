@@ -10,6 +10,7 @@ export default function Room() {
   
   // Get initial state from navigation
   const initialRoom = location.state?.room || null;
+  const fromGame = location.state?.fromGame || false;
   const initialTeam = location.state?.team || (location.state?.isCreator ? 'red' : null);
   const initialIsHost = location.state?.isCreator || false;
   
@@ -20,6 +21,13 @@ export default function Room() {
   const [isHost, setIsHost] = useState(initialIsHost);
   const [needsJoin, setNeedsJoin] = useState(false);
   const [joinName, setJoinName] = useState('');
+
+  // If returning from game, update status from room data
+  useEffect(() => {
+    if (fromGame && initialRoom) {
+      updateMyStatus(initialRoom);
+    }
+  }, [fromGame, initialRoom]);
 
   useEffect(() => {
     socket.on('room-updated', ({ room }) => {
