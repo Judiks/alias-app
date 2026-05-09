@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { socket } from '../socket';
 import { Users, Play, RefreshCw, ArrowLeft } from 'lucide-react';
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 export default function LobbyList() {
   const navigate = useNavigate();
@@ -12,22 +11,24 @@ export default function LobbyList() {
   const [joinName, setJoinName] = useState('');
   const [showJoinForm, setShowJoinForm] = useState(false);
 
-  const fetchRooms = async () => {
-    try {
-      const response = await fetch(`${API_URL}/api/rooms`);
-      const data = await response.json();
-      setRooms(data.rooms || []);
-    } catch (error) {
-      console.error('Failed to fetch rooms:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
-    fetchRooms();
-    const interval = setInterval(fetchRooms, 5000); // Refresh every 5 seconds
-    return () => clearInterval(interval);
+    // Request rooms list via socket
+    socket.emit('get-rooms');
+
+    socket.on('rooms-list', ({ rooms: roomList }) => {
+      setRooms(roomList || []);
+      setLoading(false);
+    });
+
+    // Auto-refresh every 5 seconds
+    const interval = setInterval(() => {
+      socket.emit('get-rooms');
+    }, 5000);
+
+    return () => {
+      clearInterval(interval);
+      socket.off('rooms-list');
+    };
   }, []);
 
   const handleJoinRoom = (roomId) => {

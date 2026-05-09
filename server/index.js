@@ -86,6 +86,22 @@ io.on('connection', (socket) => {
   let currentRoom = null;
   let playerName = null;
 
+  // Get rooms list
+  socket.on('get-rooms', () => {
+    const roomList = [];
+    rooms.forEach((room) => {
+      roomList.push({
+        id: room.id,
+        state: room.state,
+        playerCount: room.teams.red.players.length + room.teams.blue.players.length,
+        redPlayers: room.teams.red.players.length,
+        bluePlayers: room.teams.blue.players.length,
+        roundNumber: room.roundNumber
+      });
+    });
+    socket.emit('rooms-list', { rooms: roomList });
+  });
+
   // Create room
   socket.on('create-room', async ({ name }) => {
     const room = createRoom(socket.id, name);
