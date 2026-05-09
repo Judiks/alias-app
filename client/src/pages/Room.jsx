@@ -82,7 +82,8 @@ export default function Room() {
   };
 
   const copyLink = () => {
-    const link = `${window.location.origin}/room/${roomId}`;
+    const base = import.meta.env.BASE_URL || '/';
+    const link = `${window.location.origin}${base}room/${roomId}`;
     navigator.clipboard.writeText(link);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -318,7 +319,7 @@ export default function Room() {
           <p className="text-indigo-300 mb-2">Поделитесь ссылкой с друзьями:</p>
           <div className="bg-white/10 backdrop-blur rounded-xl px-4 py-3 flex items-center justify-between">
             <code className="text-sm text-indigo-200 truncate">
-              {window.location.origin}/room/{roomId}
+              {window.location.origin}{import.meta.env.BASE_URL || '/'}room/{roomId}
             </code>
             <button
               onClick={copyLink}
